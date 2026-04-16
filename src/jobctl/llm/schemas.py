@@ -52,3 +52,9 @@ class ProposedFact(BaseModel):
     fact: ExtractedFact
     confidence: float
     source_quote: str
+
+
+class ProposedFacts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    facts: list[ProposedFact] = Field(default_factory=list)

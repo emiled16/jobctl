@@ -48,7 +48,26 @@ def onboard() -> None:
 @main.command()
 def yap() -> None:
     """Add profile knowledge from freeform notes."""
-    click.echo("not implemented yet")
+    try:
+        project_root = find_project_root(Path.cwd())
+        config = load_config(project_root)
+        from jobctl.conversation.yap import run_yap
+        from jobctl.db.connection import get_connection
+        from jobctl.llm.client import LLMClient
+
+        db_path = project_root / CONFIG_DIR_NAME / "jobctl.db"
+        llm_client = LLMClient(
+            api_key=config.openai_api_key, model=config.llm_model, cwd=project_root
+        )
+        conn = get_connection(db_path)
+        try:
+            run_yap(conn, llm_client)
+        finally:
+            conn.close()
+    except KeyboardInterrupt:
+        click.echo("\nYap session interrupted. Progress has been saved.")
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @main.command()
