@@ -1,0 +1,2 @@
+"""Cover letter YAML generation."""
+

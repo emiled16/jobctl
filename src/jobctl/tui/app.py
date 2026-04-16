@@ -1,0 +1,2 @@
+"""Textual application root."""
+

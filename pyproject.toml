@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jobctl"
+version = "0.1.0"
+description = "AI-powered job search assistant CLI and TUI."
+readme = "README.md"
+requires-python = ">=3.11, <=3.14"
+dependencies = [
+    "click==8.1.8",
+    "httpx==0.28.1",
+    "openai==1.76.2",
+    "playwright==1.52.0",
+    "pygithub==2.6.1",
+    "pyyaml==6.0.2",
+    "rich==14.0.0",
+    "sqlite-vec==0.1.6",
+    "textual==3.1.0",
+    "weasyprint==65.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.5",
+    "ruff==0.11.6",
+]
+
+[project.scripts]
+jobctl = "jobctl.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jobctl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+

@@ -1,0 +1,2 @@
+"""Job tracker CRUD operations."""
+
