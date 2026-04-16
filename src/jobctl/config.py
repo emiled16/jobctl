@@ -11,7 +11,7 @@ CONFIG_DIR_NAME = ".jobctl"
 CONFIG_FILE_NAME = "config.yaml"
 DEFAULT_CONFIG = {
     "openai_api_key": "",
-    "embedding_model": "text-embedding-3-small",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
     "llm_model": "gpt-5.4",
     "default_template": "resume.html",
 }

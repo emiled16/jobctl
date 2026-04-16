@@ -7,10 +7,11 @@ name = "jobctl"
 version = "0.1.0"
 description = "AI-powered job search assistant CLI and TUI."
 readme = "README.md"
-requires-python = ">=3.11, <=3.14"
+requires-python = ">=3.11, <3.14"
 dependencies = [
     "click==8.1.8",
     "httpx==0.28.1",
+    "numpy==1.26.4",
     "openai==1.76.2",
     "playwright==1.52.0",
     "pydantic==2.13.1",
@@ -21,6 +22,8 @@ dependencies = [
     "rich==14.0.0",
     "sqlite-vec==0.1.6",
     "textual==3.1.0",
+    "torch==2.2.2",
+    "transformers==4.51.3",
     "weasyprint==65.1",
 ]
 

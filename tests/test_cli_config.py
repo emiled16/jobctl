@@ -20,7 +20,7 @@ def test_init_creates_jobctl_directory_and_default_config(tmp_path: Path) -> Non
         assert (isolated_path / ".jobctl" / "exports").is_dir()
         assert load_config(isolated_path) == JobctlConfig(
             openai_api_key="",
-            embedding_model="text-embedding-3-small",
+            embedding_model="sentence-transformers/all-MiniLM-L6-v2",
             llm_model="gpt-5.4",
             default_template="resume.html",
         )

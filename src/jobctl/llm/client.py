@@ -1,36 +1,41 @@
-"""OpenAI API client wrapper."""
+"""Local Codex CLI LLM client wrapper."""
 
-import time
-from collections.abc import Iterator
+import json
+import subprocess
+import tempfile
+from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any, TypeVar
 
-from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 from pydantic import BaseModel
 
 
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-MAX_EMBEDDING_BATCH_SIZE = 2048
-MAX_RETRY_ATTEMPTS = 3
+DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_DIMENSIONS = 1536
 
 StructuredModel = TypeVar("StructuredModel", bound=BaseModel)
 Message = dict[str, Any]
+CodexRunner = Callable[[str, Path | None, str | None, str | None], str]
+_EMBEDDERS: dict[str, "TransformerEmbedder"] = {}
 
 
 class LLMClient:
-    def __init__(self, api_key: str, model: str, client: OpenAI | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        codex_binary: str = "codex",
+        cwd: Path | None = None,
+        runner: CodexRunner | None = None,
+    ) -> None:
         self.model = model
-        self._client = client or OpenAI(api_key=api_key)
+        self.codex_binary = codex_binary
+        self.cwd = cwd
+        self._runner = runner or self._run_codex
 
     def chat(self, messages: list[Message], temperature: float = 0.7) -> str:
-        response = _retry(
-            lambda: self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-            )
-        )
-        content = response.choices[0].message.content
-        return content or ""
+        prompt = _messages_to_prompt(messages, temperature=temperature)
+        return self._runner(prompt, None, self.model, self.cwd).strip()
 
     def chat_structured(
         self,
@@ -38,84 +43,234 @@ class LLMClient:
         response_format: type[StructuredModel],
         temperature: float = 0.3,
     ) -> StructuredModel:
-        response = _retry(
-            lambda: self._client.beta.chat.completions.parse(
-                model=self.model,
-                messages=messages,
-                response_format=response_format,
-                temperature=temperature,
-            )
+        prompt = (
+            f"{_messages_to_prompt(messages, temperature=temperature)}\n\n"
+            "Return only JSON that matches the provided schema. Do not include Markdown fences."
         )
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise ValueError("OpenAI structured response did not include parsed content")
-        return parsed
+        schema_path = _write_json_schema(response_format)
+        try:
+            output = self._runner(prompt, schema_path, self.model, self.cwd)
+        finally:
+            schema_path.unlink(missing_ok=True)
+
+        return response_format.model_validate_json(output)
 
     def chat_stream(self, messages: list[Message], temperature: float = 0.7) -> Iterator[str]:
-        stream = _retry(
-            lambda: self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                stream=True,
-            )
-        )
-        for event in stream:
-            chunk = event.choices[0].delta.content
-            if chunk:
-                yield chunk
+        yield self.chat(messages, temperature=temperature)
 
     def get_embedding(self, text: str, model: str = DEFAULT_EMBEDDING_MODEL) -> list[float]:
-        return get_embedding(text, model=model, client=self._client)
+        return get_embedding(text, model=model)
 
     def get_embeddings_batch(
         self,
         texts: list[str],
         model: str = DEFAULT_EMBEDDING_MODEL,
     ) -> list[list[float]]:
-        return get_embeddings_batch(texts, model=model, client=self._client)
+        return get_embeddings_batch(texts, model=model)
+
+    def _run_codex(
+        self,
+        prompt: str,
+        output_schema: Path | None,
+        model: str | None,
+        cwd: Path | None,
+    ) -> str:
+        with tempfile.NamedTemporaryFile("r", suffix=".txt", delete=False) as output_file:
+            output_path = Path(output_file.name)
+
+        command = [
+            self.codex_binary,
+            "exec",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "--output-last-message",
+            str(output_path),
+            "--color",
+            "never",
+        ]
+        if model:
+            command.extend(["--model", model])
+        if cwd:
+            command.extend(["--cd", str(cwd)])
+        if output_schema:
+            command.extend(["--output-schema", str(output_schema)])
+        command.append("-")
+
+        try:
+            subprocess.run(
+                command,
+                input=prompt,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            return output_path.read_text(encoding="utf-8")
+        finally:
+            output_path.unlink(missing_ok=True)
 
 
-def get_embedding(
-    text: str, model: str = DEFAULT_EMBEDDING_MODEL, client: OpenAI | None = None
-) -> list[float]:
-    embeddings = get_embeddings_batch([text], model=model, client=client)
-    return embeddings[0]
+def get_embedding(text: str, model: str = DEFAULT_EMBEDDING_MODEL) -> list[float]:
+    return get_embeddings_batch([text], model=model)[0]
 
 
 def get_embeddings_batch(
     texts: list[str],
     model: str = DEFAULT_EMBEDDING_MODEL,
-    client: OpenAI | None = None,
 ) -> list[list[float]]:
     if not texts:
         return []
-
-    openai_client = client or OpenAI()
-    embeddings: list[list[float]] = []
-    for start in range(0, len(texts), MAX_EMBEDDING_BATCH_SIZE):
-        batch = texts[start : start + MAX_EMBEDDING_BATCH_SIZE]
-        response = _retry(
-            lambda: openai_client.embeddings.create(
-                model=model,
-                input=batch,
-            )
-        )
-        embeddings.extend([item.embedding for item in response.data])
-    return embeddings
+    return _get_embedder(model).embed(texts)
 
 
-def _retry(operation: Any) -> Any:
-    last_error: Exception | None = None
-    for attempt in range(MAX_RETRY_ATTEMPTS):
+class TransformerEmbedder:
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+        self.tokenizer, self.model = _load_transformer_model(model_name)
+        self.model.eval()
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
         try:
-            return operation()
-        except (RateLimitError, APITimeoutError, APIConnectionError, APIError) as exc:
-            last_error = exc
-            if attempt == MAX_RETRY_ATTEMPTS - 1:
-                break
-            time.sleep(2**attempt)
+            import torch
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Transformer embeddings require torch and transformers to be installed."
+            ) from exc
 
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("Retry operation failed without an exception")
+        encoded = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        )
+        with torch.no_grad():
+            outputs = self.model(**encoded)
+
+        pooled = _mean_pool(outputs.last_hidden_state, encoded["attention_mask"])
+        normalized = torch.nn.functional.normalize(pooled, p=2, dim=1)
+        return [_fit_embedding_dimensions(row.tolist()) for row in normalized]
+
+
+def _get_embedder(model: str) -> TransformerEmbedder:
+    if model not in _EMBEDDERS:
+        _EMBEDDERS[model] = TransformerEmbedder(model)
+    return _EMBEDDERS[model]
+
+
+def _load_transformer_model(model_name: str):
+    try:
+        from transformers import AutoModel, AutoTokenizer
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Transformer embeddings require torch and transformers to be installed."
+        ) from exc
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
+    return tokenizer, model
+
+
+def _mean_pool(last_hidden_state, attention_mask):
+    import torch
+
+    expanded_mask = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+    summed_embeddings = torch.sum(last_hidden_state * expanded_mask, dim=1)
+    token_counts = torch.clamp(expanded_mask.sum(dim=1), min=1e-9)
+    return summed_embeddings / token_counts
+
+
+def _fit_embedding_dimensions(embedding: list[float]) -> list[float]:
+    if len(embedding) == EMBEDDING_DIMENSIONS:
+        return embedding
+    if len(embedding) > EMBEDDING_DIMENSIONS:
+        return embedding[:EMBEDDING_DIMENSIONS]
+    return [*embedding, *([0.0] * (EMBEDDING_DIMENSIONS - len(embedding)))]
+
+
+def _messages_to_prompt(messages: list[Message], temperature: float) -> str:
+    rendered_messages = [
+        f"{message.get('role', 'user').upper()}:\n{message.get('content', '')}"
+        for message in messages
+    ]
+    return "\n\n".join([*rendered_messages, f"TEMPERATURE: {temperature}"])
+
+
+def _write_json_schema(response_format: type[BaseModel]) -> Path:
+    with tempfile.NamedTemporaryFile("w", suffix=".schema.json", delete=False) as schema_file:
+        schema_path = Path(schema_file.name)
+        json.dump(response_format.model_json_schema(), schema_file)
+    return schema_path
+
+
+# OpenAI provider kept for later reuse.
+#
+# import time
+# from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
+#
+# MAX_EMBEDDING_BATCH_SIZE = 2048
+# MAX_RETRY_ATTEMPTS = 3
+#
+#
+# class OpenAILLMClient:
+#     def __init__(self, api_key: str, model: str, client: OpenAI | None = None) -> None:
+#         self.model = model
+#         self._client = client or OpenAI(api_key=api_key)
+#
+#     def chat(self, messages: list[Message], temperature: float = 0.7) -> str:
+#         response = _retry(
+#             lambda: self._client.chat.completions.create(
+#                 model=self.model,
+#                 messages=messages,
+#                 temperature=temperature,
+#             )
+#         )
+#         content = response.choices[0].message.content
+#         return content or ""
+#
+#     def chat_structured(
+#         self,
+#         messages: list[Message],
+#         response_format: type[StructuredModel],
+#         temperature: float = 0.3,
+#     ) -> StructuredModel:
+#         response = _retry(
+#             lambda: self._client.beta.chat.completions.parse(
+#                 model=self.model,
+#                 messages=messages,
+#                 response_format=response_format,
+#                 temperature=temperature,
+#             )
+#         )
+#         parsed = response.choices[0].message.parsed
+#         if parsed is None:
+#             raise ValueError("OpenAI structured response did not include parsed content")
+#         return parsed
+#
+#     def get_embedding(
+#         self,
+#         text: str,
+#         model: str = "text-embedding-3-small",
+#     ) -> list[float]:
+#         response = _retry(
+#             lambda: self._client.embeddings.create(
+#                 model=model,
+#                 input=[text],
+#             )
+#         )
+#         return response.data[0].embedding
+#
+#
+# def _retry(operation: Any) -> Any:
+#     last_error: Exception | None = None
+#     for attempt in range(MAX_RETRY_ATTEMPTS):
+#         try:
+#             return operation()
+#         except (RateLimitError, APITimeoutError, APIConnectionError, APIError) as exc:
+#             last_error = exc
+#             if attempt == MAX_RETRY_ATTEMPTS - 1:
+#                 break
+#             time.sleep(2**attempt)
+#
+#     if last_error is not None:
+#         raise last_error
+#     raise RuntimeError("Retry operation failed without an exception")

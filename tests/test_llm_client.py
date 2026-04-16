@@ -1,139 +1,142 @@
-from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
 
 import pytest
 
-from jobctl.llm.client import LLMClient, get_embedding, get_embeddings_batch
+from jobctl.llm import client as llm_client_module
+from jobctl.llm.client import EMBEDDING_DIMENSIONS, LLMClient, get_embedding, get_embeddings_batch
 from jobctl.llm.schemas import ExtractedFact, ExtractedProfile, FitEvaluation
 
 
-@dataclass
-class EmbeddingItem:
-    embedding: list[float]
+class FakeCodexRunner:
+    def __init__(self, output: str) -> None:
+        self.output = output
+        self.calls: list[dict] = []
 
-
-@dataclass
-class EmbeddingResponse:
-    data: list[EmbeddingItem]
-
-
-@dataclass
-class Message:
-    content: str | None = None
-    parsed: Any = None
-
-
-@dataclass
-class Choice:
-    message: Message | None = None
-    delta: Message | None = None
-
-
-@dataclass
-class CompletionResponse:
-    choices: list[Choice]
-
-
-class FakeEmbeddings:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-    def create(self, model: str, input: list[str]) -> EmbeddingResponse:
-        self.calls.append({"model": model, "input": input})
-        return EmbeddingResponse(
-            data=[EmbeddingItem([float(index)]) for index, _ in enumerate(input)]
-        )
-
-
-class FakeChatCompletions:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-    def create(
+    def __call__(
         self,
-        model: str,
-        messages: list[dict[str, Any]],
-        temperature: float,
-        stream: bool = False,
-    ) -> CompletionResponse | list[CompletionResponse]:
+        prompt: str,
+        output_schema: Path | None,
+        model: str | None,
+        cwd: Path | None,
+    ) -> str:
         self.calls.append(
             {
+                "prompt": prompt,
+                "output_schema": output_schema,
                 "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "stream": stream,
+                "cwd": cwd,
             }
         )
-        if stream:
-            return [
-                CompletionResponse(choices=[Choice(delta=Message(content="hel"))]),
-                CompletionResponse(choices=[Choice(delta=Message(content="lo"))]),
-            ]
-        return CompletionResponse(choices=[Choice(message=Message(content="hello"))])
+        return self.output
 
 
-class FakeParsedCompletions:
-    def __init__(self, parsed: Any) -> None:
-        self.parsed = parsed
-        self.calls: list[dict[str, Any]] = []
+class FakeEmbedder:
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+        self.calls: list[list[str]] = []
 
-    def parse(
-        self,
-        model: str,
-        messages: list[dict[str, Any]],
-        response_format: type[Any],
-        temperature: float,
-    ) -> CompletionResponse:
-        self.calls.append(
-            {
-                "model": model,
-                "messages": messages,
-                "response_format": response_format,
-                "temperature": temperature,
-            }
-        )
-        return CompletionResponse(choices=[Choice(message=Message(parsed=self.parsed))])
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(texts)
+        embeddings: list[list[float]] = []
+        for text in texts:
+            embedding = [0.0] * EMBEDDING_DIMENSIONS
+            embedding[0] = float(len(text))
+            embeddings.append(embedding)
+        return embeddings
 
 
-class FakeClient:
-    def __init__(self, parsed: Any | None = None) -> None:
-        self.embeddings = FakeEmbeddings()
-        self.chat = type("Chat", (), {"completions": FakeChatCompletions()})()
-        parsed_completions = FakeParsedCompletions(parsed)
-        beta_chat = type("BetaChat", (), {"completions": parsed_completions})()
-        self.beta = type("Beta", (), {"chat": beta_chat})()
+def test_get_embedding_uses_transformers_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    created_embedders: list[FakeEmbedder] = []
+
+    llm_client_module._EMBEDDERS.clear()
+    monkeypatch.setattr(
+        llm_client_module,
+        "TransformerEmbedder",
+        lambda model_name: created_embedders.append(FakeEmbedder(model_name))
+        or created_embedders[-1],
+    )
+
+    embedding = get_embedding("hello", model="local-test-model")
+
+    assert created_embedders[0].model_name == "local-test-model"
+    assert created_embedders[0].calls == [["hello"]]
+    assert len(embedding) == EMBEDDING_DIMENSIONS
+    assert embedding[0] == 5.0
 
 
-def test_get_embedding_calls_openai_embeddings_client() -> None:
-    fake_client = FakeClient()
+def test_get_embedding_reuses_cached_transformers_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    load_count = 0
 
-    embedding = get_embedding("hello", model="text-embedding-3-small", client=fake_client)
+    def fake_loader(_model_name: str):
+        nonlocal load_count
+        load_count += 1
+        return FakeEmbedder(_model_name)
 
-    assert embedding == [0.0]
-    assert fake_client.embeddings.calls == [{"model": "text-embedding-3-small", "input": ["hello"]}]
+    llm_client_module._EMBEDDERS.clear()
+    monkeypatch.setattr(llm_client_module, "TransformerEmbedder", fake_loader)
 
+    get_embedding("hello", model="local-test-model")
+    get_embedding("world", model="local-test-model")
 
-def test_get_embeddings_batch_splits_at_openai_limit() -> None:
-    fake_client = FakeClient()
-    texts = [str(index) for index in range(2049)]
-
-    embeddings = get_embeddings_batch(texts, model="embedding-model", client=fake_client)
-
-    assert len(embeddings) == 2049
-    assert [len(call["input"]) for call in fake_client.embeddings.calls] == [2048, 1]
+    assert load_count == 1
 
 
-def test_llm_client_chat_and_stream() -> None:
-    fake_client = FakeClient()
-    client = LLMClient(api_key="sk-test", model="gpt-5.4", client=fake_client)
+def test_get_embedding_is_deterministic_for_same_transformer_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm_client_module._EMBEDDERS.clear()
+    monkeypatch.setattr(
+        llm_client_module,
+        "TransformerEmbedder",
+        lambda model_name: FakeEmbedder(model_name),
+    )
+
+    embedding = get_embedding("hello")
+
+    assert embedding == get_embedding("hello")
+    assert len(embedding) == EMBEDDING_DIMENSIONS
+
+
+def test_get_embeddings_batch_uses_transformers_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    llm_client_module._EMBEDDERS.clear()
+    monkeypatch.setattr(
+        llm_client_module,
+        "TransformerEmbedder",
+        lambda model_name: FakeEmbedder(model_name),
+    )
+
+    embeddings = get_embeddings_batch(["a", "b"])
+
+    assert len(embeddings) == 2
+    assert all(len(embedding) == EMBEDDING_DIMENSIONS for embedding in embeddings)
+
+
+def test_llm_client_chat_uses_codex_runner_non_interactively() -> None:
+    runner = FakeCodexRunner("hello\n")
+    client = LLMClient(
+        api_key="unused",
+        model="gpt-5.4",
+        cwd=Path("/tmp/project"),
+        runner=runner,
+    )
     messages = [{"role": "user", "content": "Say hello"}]
 
     assert client.chat(messages) == "hello"
-    assert "".join(client.chat_stream(messages)) == "hello"
+    assert runner.calls[0]["output_schema"] is None
+    assert runner.calls[0]["model"] == "gpt-5.4"
+    assert runner.calls[0]["cwd"] == Path("/tmp/project")
+    assert "USER:\nSay hello" in runner.calls[0]["prompt"]
+
+
+def test_llm_client_chat_stream_yields_single_codex_response() -> None:
+    runner = FakeCodexRunner("hello")
+    client = LLMClient(api_key="unused", model="gpt-5.4", runner=runner)
+
+    assert list(client.chat_stream([{"role": "user", "content": "Say hello"}])) == ["hello"]
 
 
 def test_llm_client_chat_structured_returns_parsed_model() -> None:
-    parsed = ExtractedProfile(
+    parsed_json = ExtractedProfile(
         facts=[
             ExtractedFact(
                 entity_type="skill",
@@ -144,23 +147,26 @@ def test_llm_client_chat_structured_returns_parsed_model() -> None:
                 text_representation="Python",
             )
         ]
-    )
-    fake_client = FakeClient(parsed=parsed)
-    client = LLMClient(api_key="sk-test", model="gpt-5.4", client=fake_client)
+    ).model_dump_json()
+    runner = FakeCodexRunner(parsed_json)
+    client = LLMClient(api_key="unused", model="gpt-5.4", runner=runner)
 
     result = client.chat_structured(
         [{"role": "user", "content": "Extract"}],
         response_format=ExtractedProfile,
     )
 
-    assert result == parsed
+    assert result.facts[0].entity_name == "Python"
+    assert runner.calls[0]["output_schema"] is not None
+    assert runner.calls[0]["output_schema"].exists() is False
+    assert "Return only JSON" in runner.calls[0]["prompt"]
 
 
-def test_llm_client_chat_structured_rejects_missing_parsed_content() -> None:
-    fake_client = FakeClient(parsed=None)
-    client = LLMClient(api_key="sk-test", model="gpt-5.4", client=fake_client)
+def test_llm_client_chat_structured_rejects_invalid_json() -> None:
+    runner = FakeCodexRunner("not json")
+    client = LLMClient(api_key="unused", model="gpt-5.4", runner=runner)
 
-    with pytest.raises(ValueError, match="parsed content"):
+    with pytest.raises(ValueError):
         client.chat_structured([], response_format=ExtractedProfile)
 
 
