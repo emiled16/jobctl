@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ role }} Cover Letter</title>
+  <style>
+    @page { size: Letter; margin: 0.75in; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 11pt; line-height: 1.45; }
+    .date { margin-bottom: 24px; }
+    .recipient { margin-bottom: 24px; }
+    p { margin: 0 0 12px; }
+    .closing { margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <p class="date">{{ date | default("", true) }}</p>
+  <div class="recipient">
+    {% if recipient %}<p>{{ recipient }}</p>{% endif %}
+    <p>{{ company }}</p>
+  </div>
+  <p>Dear Hiring Team,</p>
+  {% for paragraph in body_paragraphs %}
+    <p>{{ paragraph }}</p>
+  {% endfor %}
+  <p class="closing">{{ closing }}</p>
+</body>
+</html>

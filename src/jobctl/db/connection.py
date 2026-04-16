@@ -76,6 +76,54 @@ def _migration_001_create_graph_tables(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX idx_edges_relation ON edges (relation)")
 
 
+def _migration_002_create_tracker_tables(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE applications (
+            id TEXT PRIMARY KEY,
+            company TEXT NOT NULL,
+            role TEXT NOT NULL,
+            url TEXT,
+            status TEXT NOT NULL DEFAULT 'evaluated',
+            fit_score REAL,
+            location TEXT,
+            compensation TEXT,
+            jd_raw TEXT,
+            jd_structured TEXT,
+            evaluation_structured TEXT,
+            resume_yaml_path TEXT,
+            cover_letter_yaml_path TEXT,
+            resume_pdf_path TEXT,
+            cover_letter_pdf_path TEXT,
+            notes TEXT,
+            recruiter_name TEXT,
+            recruiter_email TEXT,
+            recruiter_linkedin TEXT,
+            follow_up_date TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX idx_applications_status ON applications (status)")
+    conn.execute("CREATE INDEX idx_applications_company ON applications (company)")
+    conn.execute(
+        """
+        CREATE TABLE application_events (
+            id TEXT PRIMARY KEY,
+            application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            description TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX idx_application_events_application_id ON application_events (application_id)"
+    )
+
+
 MIGRATIONS: list[Migration] = [
     ("001_create_graph_tables", _migration_001_create_graph_tables),
+    ("002_create_tracker_tables", _migration_002_create_tracker_tables),
 ]

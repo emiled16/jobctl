@@ -3080,4 +3080,4 @@ dev = ["pytest", "ruff"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11, <3.14"
-content-hash = "01200cf1451fb172d0466abf6ec69929fa64f2c945204eef2b641c3189c7ccc8"
+content-hash = "6ed2a170f8842816ab608ac7b1065cc17fc10e1df9f3eab5907b7011512a2d2d"

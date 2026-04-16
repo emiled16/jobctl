@@ -2,7 +2,7 @@
 
 `jobctl` is a Python CLI for building a local career knowledge graph and using it to support job search workflows. It stores project data in a `.jobctl/` directory, persists graph data in SQLite, uses local Transformers embeddings for retrieval, and uses the local Codex CLI in non-interactive mode for LLM calls.
 
-The project is under active implementation. The current working surface includes project initialization, config management, graph storage, resume/GitHub ingestion helpers, onboarding/yap conversation logic, and the `jobctl yap` CLI command. Job fetching, fit evaluation, material generation, rendering, and the tracker CRM are still planned.
+The project is under active implementation. The current working surface includes project initialization, config management, graph storage, resume/GitHub ingestion helpers, onboarding/yap conversation logic, job fetching, fit evaluation, resume and cover letter YAML generation, PDF rendering, an application tracker, and Textual TUI entry points.
 
 ## Requirements
 
@@ -10,6 +10,8 @@ The project is under active implementation. The current working surface includes
 - `pyenv`
 - `direnv` recommended
 - Local `codex` binary available on `PATH`
+- Native WeasyPrint libraries for PDF rendering
+- Playwright Chromium for browser-based job page fallback
 - Network access for first-time dependency and model downloads
 
 The pinned Python version is in `.python-version`.
@@ -21,6 +23,7 @@ pyenv install 3.12.8
 pyenv local 3.12.8
 python -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
+npx playwright install chromium
 ```
 
 Verify the install:
@@ -84,9 +87,42 @@ jobctl yap
 
 Yap mode lets you paste freeform notes about your experience. The LLM proposes facts, you confirm or edit them, and confirmed facts are added to the SQLite knowledge graph.
 
+Start onboarding:
+
+```bash
+jobctl onboard
+```
+
+Evaluate a job and generate materials:
+
+```bash
+jobctl apply https://example.com/jobs/senior-engineer
+```
+
+Render a generated YAML file or an export directory:
+
+```bash
+jobctl render .jobctl/exports/2026-04-16-acme-senior-engineer/resume.yaml
+jobctl render .jobctl/exports/2026-04-16-acme-senior-engineer
+```
+
+Open the tracker or profile TUI:
+
+```bash
+jobctl track
+jobctl profile
+```
+
+Use logging flags before the subcommand:
+
+```bash
+jobctl --verbose apply ./sample-jd.txt
+jobctl --quiet render .jobctl/exports/latest
+```
+
 ## Implemented
 
-- Click CLI skeleton with `init`, `config`, and `yap`
+- Click CLI with `init`, `config`, `onboard`, `yap`, `apply`, `render`, `track`, and `profile`
 - `.jobctl/` project directory model
 - Config load/save/discovery
 - SQLite connection management and migrations
@@ -99,16 +135,28 @@ Yap mode lets you paste freeform notes about your experience. The LLM proposes f
 - GitHub repository metadata ingestion helpers
 - Onboarding coverage analysis and follow-up generation helpers
 - Yap mode extraction, confirmation, and persistence loop
-
-## Planned
-
-- Wire `jobctl onboard`
-- Job description fetching and parsing
+- Job description HTTP fetch, Playwright fallback, and structured extraction
 - Fit evaluation against graph context
-- Tailored resume and cover letter YAML generation
-- HTML/PDF rendering
-- Application tracker CRM
-- Textual TUI
+- Tailored resume and cover letter YAML generation with review/edit loops
+- ATS-oriented HTML templates and WeasyPrint PDF rendering
+- Application tracker tables and CRUD operations
+- Apply pipeline orchestration
+- Textual tracker and profile screens
+
+## Configuration
+
+`jobctl config` manages:
+
+```text
+openai_api_key      Kept for future OpenAI provider reuse; local Codex mode ignores it.
+embedding_model     Local Transformers embedding model.
+llm_model           Model name passed to `codex exec`.
+default_template    Default resume template name.
+```
+
+## How It Works
+
+`jobctl` stores career facts as typed graph nodes and relationship edges in SQLite. Resume, GitHub, onboarding, and yap inputs create or update this graph. Local Transformers embeddings are stored per node, then job descriptions are embedded and matched against graph nodes to retrieve relevant experience. The local Codex CLI produces structured job descriptions, fit evaluations, and tailored YAML materials. YAML is reviewed before rendering to PDF through HTML templates.
 
 ## Development
 

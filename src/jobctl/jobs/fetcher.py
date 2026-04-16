@@ -57,6 +57,7 @@ def fetch_jd_browser(url: str) -> str | None:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
     except ImportError:
+        console.print("Playwright is not installed; falling back to pasted job description.")
         return None
 
     try:
@@ -68,7 +69,14 @@ def fetch_jd_browser(url: str) -> str | None:
                 return page.content()
             finally:
                 browser.close()
-    except (PlaywrightError, PlaywrightTimeoutError):
+    except PlaywrightTimeoutError:
+        console.print("Timed out fetching the job page in a browser.")
+        return None
+    except PlaywrightError as exc:
+        if "Executable doesn't exist" in str(exc) or "playwright install" in str(exc).lower():
+            console.print("Missing Playwright browser. Run `npx playwright install chromium`.")
+        else:
+            console.print("Browser fetch failed; falling back to pasted job description.")
         return None
 
 

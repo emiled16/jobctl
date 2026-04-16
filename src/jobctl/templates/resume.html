@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ contact.name }} Resume</title>
+  <style>
+    @page { size: Letter; margin: 0.5in; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 10.5pt; line-height: 1.35; }
+    h1 { text-align: center; font-size: 20pt; margin: 0 0 4px; }
+    .contact { text-align: center; margin-bottom: 12px; }
+    h2 { font-size: 11.5pt; text-transform: uppercase; border-bottom: 1px solid #777; padding-bottom: 2px; margin: 12px 0 6px; }
+    h3 { font-size: 11pt; margin: 8px 0 2px; }
+    .meta { color: #333; font-style: italic; }
+    ul { margin: 4px 0 0 18px; padding: 0; }
+    li { margin-bottom: 3px; }
+    .skills { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; }
+    .section { break-inside: avoid; }
+  </style>
+</head>
+<body>
+  <h1>{{ contact.name }}</h1>
+  <div class="contact">
+    {{ contact.email }}
+    {% if contact.phone %} | {{ contact.phone }}{% endif %}
+    {% if contact.location %} | {{ contact.location }}{% endif %}
+    {% if contact.linkedin %} | {{ contact.linkedin }}{% endif %}
+    {% if contact.github %} | {{ contact.github }}{% endif %}
+    {% if contact.website %} | {{ contact.website }}{% endif %}
+  </div>
+
+  <section class="section">
+    <h2>Summary</h2>
+    <p>{{ summary }}</p>
+  </section>
+
+  <section>
+    <h2>Experience</h2>
+    {% for entry in experience %}
+      <div class="section">
+        <h3>{{ entry.title }}, {{ entry.company }}</h3>
+        <div class="meta">{{ entry.start_date }}{% if entry.end_date %} - {{ entry.end_date }}{% else %} - Present{% endif %}</div>
+        <ul>
+          {% for bullet in entry.bullets %}
+            <li>{{ bullet }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="section">
+    <h2>Skills</h2>
+    <div class="skills">
+      {% for category, values in skills.items() %}
+        <div><strong>{{ category }}:</strong> {{ values | join(", ") }}</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Education</h2>
+    {% for entry in education %}
+      <p><strong>{{ entry.degree }}</strong>{% if entry.field %}, {{ entry.field }}{% endif %}, {{ entry.institution }}{% if entry.end_date %}, {{ entry.end_date }}{% endif %}</p>
+      {% if entry.details %}
+        <ul>{% for detail in entry.details %}<li>{{ detail }}</li>{% endfor %}</ul>
+      {% endif %}
+    {% endfor %}
+  </section>
+
+  {% if certifications %}
+    <section class="section">
+      <h2>Certifications</h2>
+      <ul>{% for certification in certifications %}<li>{{ certification }}</li>{% endfor %}</ul>
+    </section>
+  {% endif %}
+
+  {% if projects %}
+    <section class="section">
+      <h2>Projects</h2>
+      {% for project in projects %}
+        <p><strong>{{ project.name }}</strong>{% if project.url %} - {{ project.url }}{% endif %}<br>{{ project.description }}</p>
+      {% endfor %}
+    </section>
+  {% endif %}
+</body>
+</html>
