@@ -17,6 +17,9 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     _run_migrations(conn)
+    from jobctl.db.vectors import init_vec
+
+    init_vec(conn)
     return conn
 
 

@@ -99,7 +99,9 @@ def get_edges_to(conn: sqlite3.Connection, node_id: str) -> list[Edge]:
     return [_edge_with_node_from_row(row, "source") for row in rows]
 
 
-def get_subgraph(conn: sqlite3.Connection, node_id: str, depth: int = 2) -> dict[str, list[Node] | list[Edge]]:
+def get_subgraph(
+    conn: sqlite3.Connection, node_id: str, depth: int = 2
+) -> dict[str, list[Node] | list[Edge]]:
     if depth < 0:
         raise ValueError("depth must be greater than or equal to 0")
 

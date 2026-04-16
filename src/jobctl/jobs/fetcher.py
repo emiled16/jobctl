@@ -1,2 +1,1 @@
 """Job description fetching pipeline."""
-

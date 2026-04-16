@@ -1,2 +1,1 @@
 """Cover letter YAML generation."""
-

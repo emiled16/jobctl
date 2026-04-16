@@ -1,2 +1,1 @@
 """Resume YAML generation."""
-

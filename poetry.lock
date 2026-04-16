@@ -2019,4 +2019,4 @@ dev = ["pytest", "ruff"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11, <=3.14"
-content-hash = "a5706254b88b5758ea933492013feba58522669d516f79c387438aa32801c88d"
+content-hash = "806f23e3734cf5c4e4e0959a0daccc6712e5bd5aba58d4c8cfb50407770c74b6"

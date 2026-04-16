@@ -1,2 +1,1 @@
 """Job fit evaluation."""
-

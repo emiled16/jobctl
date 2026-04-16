@@ -1,2 +1,1 @@
 """Job tracker TUI view."""
-

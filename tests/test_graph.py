@@ -119,4 +119,3 @@ def test_update_node_changes_fields_and_updated_at(conn: sqlite3.Connection) -> 
     assert updated_node["properties"] == {"years": 9}
     assert updated_node["text_representation"] == "Python 3 programming"
     assert updated_node["updated_at"] != original_node["updated_at"]
-
