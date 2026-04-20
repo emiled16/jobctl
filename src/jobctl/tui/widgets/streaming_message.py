@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from rich import box
+from rich.console import Group
 from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.text import Text
 from textual.widgets import Static
 
 
@@ -11,12 +15,11 @@ class StreamingMessage(Static):
 
     DEFAULT_CSS = """
     StreamingMessage {
-        border: solid #45475a;
-        padding: 0 1;
+        padding: 0 1 0 1;
         height: auto;
         max-height: 8;
-        background: #1e1e2e;
-        color: #cdd6f4;
+        background: transparent;
+        color: #a6e3a1;
     }
     """
 
@@ -26,7 +29,18 @@ class StreamingMessage(Static):
 
     def append(self, token: str) -> None:
         self.content += token
-        self.update(Markdown(f"**assistant:** {self.content}"))
+        self.update(
+            Panel(
+                Group(
+                    Text("Assistant", style="bold #a6e3a1"),
+                    Markdown(self.content),
+                ),
+                box=box.ROUNDED,
+                border_style="#a6e3a1",
+                style="on #1e1e2e",
+                padding=(0, 1),
+            )
+        )
 
 
 __all__ = ["StreamingMessage"]

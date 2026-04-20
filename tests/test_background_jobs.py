@@ -121,3 +121,41 @@ def test_start_apply_uses_worker_thread_connection(
         if runner is not None:
             runner.shutdown(wait=True)
         conn.close()
+
+
+def test_start_apply_without_db_path_allows_worker_thread_db_access(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "jobctl.db"
+    conn = get_connection(db_path)
+    runner = None
+    try:
+        store = BackgroundJobStore(conn)
+        bus = AsyncEventBus()
+        runner = BackgroundJobRunner(store, bus, db_path=db_path)
+
+        def fake_run_apply(worker_conn, *_args, **_kwargs):
+            worker_conn.execute("SELECT 1").fetchone()
+            return "app-2"
+
+        monkeypatch.setattr(apply_pipeline, "run_apply", fake_run_apply)
+
+        job_id = start_apply(
+            conn=conn,
+            provider=FakeProvider(),
+            bus=bus,
+            store=store,
+            runner=runner,
+            config=default_config(),
+            url_or_text="Backend Engineer JD",
+            db_path=None,
+        )
+
+        future = runner._futures[job_id]
+        assert future.result(timeout=5) == {"app_id": "app-2"}
+        assert store.get_job(job_id).state == "done"  # type: ignore[union-attr]
+    finally:
+        if runner is not None:
+            runner.shutdown(wait=True)
+        conn.close()

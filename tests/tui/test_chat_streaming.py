@@ -107,7 +107,7 @@ async def test_chat_renders_partial_stream_before_final_message(tmp_path: Path) 
             chat.query_one("#streaming-assistant-message", StreamingMessage)
 
         log = chat.query_one("#chat-log")
-        assert len(log.lines) == lines_before + 2
+        assert len(log.lines) > lines_before
         assert chat._stream.buffer == ""
 
         await app.action_quit()

@@ -2,10 +2,10 @@
 
 Implements T18 as a testable stub: an echo-bot handler validates the
 ``AsyncEventBus`` round-trip by publishing both the user turn and the echoed
-assistant turn as :class:`AgentDoneEvent`. Slash commands (``/mode``,
-``/quit``, ``/help``) are intercepted locally before forwarding to the bus.
-The LangGraph-powered handler is wired in T22/T27; until then the echo bot
-keeps the view usable in the TUI.
+assistant turn as :class:`AgentDoneEvent`. Slash commands (for example
+``/mode``, ``/jobs``, ``/quit``, ``/help``) are intercepted locally before
+forwarding to the bus. The LangGraph-powered handler is wired in T22/T27;
+until then the echo bot keeps the view usable in the TUI.
 """
 
 from __future__ import annotations
@@ -15,7 +15,12 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from rich import box
+from rich.align import Align
+from rich.console import Group
 from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Input, RichLog
@@ -57,9 +62,9 @@ class ChatView(Vertical):
     }
     ChatView #chat-log {
         height: 1fr;
-        background: #181825;
+        background: #11111b;
         color: #cdd6f4;
-        padding: 1 2;
+        padding: 1 1;
     }
     ChatView #chat-input {
         height: 3;
@@ -129,7 +134,7 @@ class ChatView(Vertical):
             content = message.get("content")
             if not role or not content:
                 continue
-            log.write(Markdown(f"**{role}:** {content}"))
+            log.write(self._chat_bubble(str(role), str(content)))
 
     def _persist_session(self, extra_message: Message | None = None) -> None:
         app = self.app
@@ -199,7 +204,7 @@ class ChatView(Vertical):
 
     def _handle_submission(self, text: str) -> None:
         log = self.query_one("#chat-log", RichLog)
-        log.write(Markdown(f"**you:** {text}"))
+        log.write(self._chat_bubble("user", text))
 
         if text.startswith("/"):
             handled = self._handle_slash_command(text)
@@ -233,6 +238,31 @@ class ChatView(Vertical):
 
     def _echo_reply(self, text: str) -> str:
         return f"echo: {text}"
+
+    def _chat_bubble(self, role: str, content: str):
+        role_key = role.strip().lower()
+        if role_key == "you":
+            role_key = "user"
+        is_user = role_key == "user"
+        speaker = "You" if is_user else "Assistant" if role_key == "assistant" else role.title()
+
+        border = "#89b4fa" if is_user else "#a6e3a1" if role_key == "assistant" else "#7f849c"
+        background = "#313244" if is_user else "#1e1e2e"
+        label_style = "bold #89b4fa" if is_user else "bold #a6e3a1"
+
+        panel = Panel(
+            Group(
+                Text(speaker, style=label_style),
+                Markdown(content),
+            ),
+            box=box.ROUNDED,
+            border_style=border,
+            style=f"on {background}",
+            padding=(0, 1),
+        )
+        if is_user:
+            return Align.right(panel)
+        return Align.left(panel)
 
     def _handle_slash_command(self, raw: str) -> bool:
         command, _, rest = raw[1:].partition(" ")
@@ -291,6 +321,9 @@ class ChatView(Vertical):
         if command == "report":
             self._render_report(rest or "summary")
             return True
+        if command == "jobs":
+            self._render_jobs(rest)
+            return True
         return False
 
     def _render_report(self, kind: str) -> None:
@@ -339,6 +372,81 @@ class ChatView(Vertical):
             return
 
         log.write(Markdown(f"_unknown /report target `{kind}`; try `coverage` or `summary`._"))
+
+    def _render_jobs(self, raw_limit: str) -> None:
+        log = self.query_one("#chat-log", RichLog)
+        conn = getattr(self.app, "conn", None)
+        if conn is None:
+            log.write(self._chat_bubble("assistant", "I need a project database to list jobs."))
+            return
+
+        limit = 10
+        if raw_limit:
+            try:
+                limit = int(raw_limit)
+            except ValueError:
+                log.write(
+                    self._chat_bubble(
+                        "assistant",
+                        "Usage: `/jobs [limit]` where `limit` is a number between 1 and 100.",
+                    )
+                )
+                return
+        if limit < 1:
+            log.write(self._chat_bubble("assistant", "Usage: `/jobs [limit]` where `limit` >= 1."))
+            return
+        limit = min(limit, 100)
+
+        try:
+            from jobctl.core.jobs.store import BackgroundJobStore
+
+            jobs = BackgroundJobStore(conn).list_jobs(limit=limit)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.write(self._chat_bubble("assistant", f"Could not load jobs: {exc}"))
+            return
+
+        log.write(self._chat_bubble("assistant", self._format_jobs_report(jobs, limit=limit)))
+
+    @staticmethod
+    def _format_jobs_report(jobs: list[Any], *, limit: int) -> str:
+        if not jobs:
+            return "No background jobs yet."
+
+        def _field(row: Any, name: str, default: Any = "") -> Any:
+            if isinstance(row, dict):
+                return row.get(name, default)
+            return getattr(row, name, default)
+
+        icon = {
+            "queued": "⏳",
+            "running": "⏵",
+            "waiting_for_user": "✋",
+            "done": "✓",
+            "failed": "✗",
+            "cancelled": "■",
+        }
+        lines = [
+            "### Job status",
+            f"Showing latest **{len(jobs)}** job(s) (limit `{limit}`).",
+        ]
+        for job in jobs:
+            state = str(_field(job, "state", "unknown"))
+            source_type = str(_field(job, "source_type", "job"))
+            source_key = " ".join(str(_field(job, "source_key", "")).split())
+            if len(source_key) > 60:
+                source_key = f"{source_key[:59]}…"
+            error = " ".join(str(_field(job, "error", "") or "").split())
+            if len(error) > 80:
+                error = f"{error[:79]}…"
+
+            line = (
+                f"- {icon.get(state, '•')} `{str(_field(job, 'id', ''))[:8]}` "
+                f"**{source_type}** · {state} · {source_key}"
+            )
+            if error:
+                line += f" · error: {error}"
+            lines.append(line)
+        return "\n".join(lines)
 
     def open_resume_picker(self) -> None:
         self._render_event(
@@ -419,7 +527,7 @@ class ChatView(Vertical):
                 if self._stream.widget is not None:
                     self._stream.widget.remove()
                 self._stream = _PendingStreamMessage()
-            log.write(Markdown(f"**{event.role}:** {content}"))
+            log.write(self._chat_bubble(event.role, content))
             return
         if isinstance(event, AgentToolCallEvent):
             pretty_args = ", ".join(f"{k}={v!r}" for k, v in event.args.items())

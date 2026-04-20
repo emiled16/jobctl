@@ -73,6 +73,11 @@ def test_extract_facts_from_resume_uses_structured_profile_schema() -> None:
 
     assert result == profile
     assert "Python engineer" in llm_client.structured_messages[0][1]["content"]
+    system_prompt = llm_client.structured_messages[0][0]["content"]
+    assert "entity_type" in system_prompt
+    assert "entity_name" in system_prompt
+    assert "text_representation" in system_prompt
+    assert "Do not use legacy keys like type, name" in system_prompt
 
 
 def test_persist_facts_creates_nodes_edges_and_embeddings(conn: sqlite3.Connection) -> None:

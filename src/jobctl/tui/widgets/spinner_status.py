@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from rich.text import Text
 from textual.widgets import Static
 
 from jobctl.core.events import AsyncEventBus, JobLifecycleEvent, JobctlEvent
@@ -31,6 +32,7 @@ class SpinnerStatus(Static):
     """
 
     _FRAMES = ("|", "/", "-", "\\")
+    _MAX_DETAIL_CHARS = 160
 
     def __init__(self, bus: AsyncEventBus, *, id: str | None = None) -> None:
         super().__init__("", id=id)
@@ -61,16 +63,18 @@ class SpinnerStatus(Static):
     def _apply_event(self, event: JobctlEvent) -> None:
         if not isinstance(event, JobLifecycleEvent):
             return
+        safe_message = self._compact_message(event.message)
         if event.phase in {"queued", "running", "waiting_for_user"}:
             self._jobs[event.job_id] = _ActiveJob(
                 label=event.label,
                 phase=event.phase,
-                message=event.message,
+                message=safe_message,
             )
         else:
             self._jobs.pop(event.job_id, None)
             if not self._jobs:
-                self.update(f"Done: {event.label}" if event.phase == "done" else event.message)
+                terminal = f"Done: {event.label}" if event.phase == "done" else safe_message
+                self.update(Text(terminal or "Job ended"))
         self._render_status()
 
     def _tick(self) -> None:
@@ -91,10 +95,16 @@ class SpinnerStatus(Static):
         job = max(self._jobs.values(), key=lambda entry: entry.updated_at)
         frame = self._FRAMES[self._frame_index]
         if job.phase == "waiting_for_user":
-            self.update(f"Waiting for input: {job.label}")
+            self.update(Text(f"Waiting for input: {job.label}"))
             return
         detail = f" - {job.message}" if job.message else ""
-        self.update(f"{frame} {job.label}{detail}")
+        self.update(Text(f"{frame} {job.label}{detail}"))
+
+    def _compact_message(self, message: str) -> str:
+        single_line = " ".join((message or "").split())
+        if len(single_line) <= self._MAX_DETAIL_CHARS:
+            return single_line
+        return f"{single_line[: self._MAX_DETAIL_CHARS - 1]}…"
 
 
 __all__ = ["SpinnerStatus"]

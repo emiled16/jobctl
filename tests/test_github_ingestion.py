@@ -15,12 +15,14 @@ class FakeLLMClient:
     def __init__(self) -> None:
         self.embedded_texts: list[str] = []
         self.repo_prompts: list[str] = []
+        self.system_prompts: list[str] = []
 
     def get_embedding(self, text: str) -> list[float]:
         self.embedded_texts.append(text)
         return [0.0] * 1536
 
     def chat_structured(self, messages: list[dict], response_format: type) -> ExtractedProfile:
+        self.system_prompts.append(messages[0]["content"])
         self.repo_prompts.append(messages[1]["content"])
         assert response_format is ExtractedProfile
         return ExtractedProfile(
@@ -137,6 +139,8 @@ def test_ingest_github_from_urls_persists_extracted_facts(conn: sqlite3.Connecti
     assert fetcher.details_requested == [("acme", "repo")]
     assert get_nodes_by_type(conn, "project")[0]["name"] == "repo"
     assert llm_client.embedded_texts == ["repo project"]
+    assert "entity_type" in llm_client.system_prompts[0]
+    assert "Do not use legacy keys like type, name" in llm_client.system_prompts[0]
 
 
 def test_ingest_github_username_uses_all_repos_when_noninteractive(

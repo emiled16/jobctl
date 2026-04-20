@@ -12,7 +12,9 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     if str(db_path) != ":memory:":
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(str(db_path))
+    # LangGraph may run sync nodes in worker threads. We allow this connection
+    # to be used across threads and rely on SQLite's own serialized access.
+    conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")

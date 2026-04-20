@@ -58,3 +58,41 @@ async def test_mode_slash_persists_after_confirmation(tmp_path: Path) -> None:
 
     if isinstance(app.conn, sqlite3.Connection):
         app.conn.close()
+
+
+def test_jobs_slash_dispatches_to_jobs_renderer() -> None:
+    chat = ChatView()
+    captured: dict[str, str] = {}
+
+    def _fake_render_jobs(raw_limit: str) -> None:
+        captured["raw_limit"] = raw_limit
+
+    chat._render_jobs = _fake_render_jobs  # type: ignore[method-assign]
+    assert chat._handle_slash_command("/jobs 7") is True
+    assert captured["raw_limit"] == "7"
+
+
+def test_format_jobs_report_includes_state_and_error() -> None:
+    jobs = [
+        {
+            "id": "aaaa1111bbbb2222",
+            "source_type": "resume",
+            "source_key": "/tmp/resume.pdf",
+            "state": "done",
+            "error": None,
+        },
+        {
+            "id": "cccc3333dddd4444",
+            "source_type": "github",
+            "source_key": "octocat",
+            "state": "failed",
+            "error": "validation [type=missing, input={'x': 1}]",
+        },
+    ]
+
+    report = ChatView._format_jobs_report(jobs, limit=10)
+    assert "Job status" in report
+    assert "resume" in report
+    assert "github" in report
+    assert "failed" in report
+    assert "validation [type=missing, input={'x': 1}]" in report
