@@ -188,6 +188,7 @@ class JobctlApp(App):
                 session_id=self.session_id,
                 store=self.job_store,
                 runner=self.job_runner,
+                config=self.config,
             )
         return self._runner
 

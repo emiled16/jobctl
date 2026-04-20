@@ -86,7 +86,10 @@ def _maybe_json(raw: str | None) -> dict[str, Any] | None:
 class ApplyView(Screen):
     BINDINGS = [
         Binding("p", "render_pdf", "Render PDF"),
+        Binding("o", "open_pdf", "Open PDF"),
+        Binding("s", "save_yaml", "Save YAML"),
         Binding("c", "generate_cover", "Cover letter"),
+        Binding("r", "refresh", "Refresh"),
     ]
 
     DEFAULT_CSS = """
@@ -126,7 +129,10 @@ class ApplyView(Screen):
                 yield TextArea(id="apply-yaml")
         yield Horizontal(
             Button("Render PDF", id="apply-render", variant="primary"),
+            Button("Open PDF", id="apply-open"),
+            Button("Save YAML", id="apply-save"),
             Button("Generate cover letter", id="apply-cover"),
+            Button("Refresh", id="apply-refresh"),
             id="apply-actions",
         )
         yield ProgressBar(total=100, id="apply-progress", show_eta=False)
@@ -134,6 +140,18 @@ class ApplyView(Screen):
 
     def on_mount(self) -> None:
         self._refresh_applications()
+        self._queue = self.bus.subscribe()
+        self.run_worker(self._pump_progress(), exclusive=False)
+
+    async def _pump_progress(self) -> None:
+        while True:
+            event = await self._queue.get()
+            if isinstance(event, ApplyProgressEvent):
+                self._set_status(f"{event.step}: {event.message}")
+                bar = self.query_one("#apply-progress", ProgressBar)
+                bar.display = True
+                # Advance a little on each progress event.
+                bar.progress = min(100, (bar.progress or 0) + 15)
 
     def _refresh_applications(self) -> None:
         self._applications = _load_applications(self.conn)
@@ -182,16 +200,106 @@ class ApplyView(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "apply-render":
             self.action_render_pdf()
+        elif event.button.id == "apply-open":
+            self.action_open_pdf()
+        elif event.button.id == "apply-save":
+            self.action_save_yaml()
         elif event.button.id == "apply-cover":
             self.action_generate_cover()
+        elif event.button.id == "apply-refresh":
+            self.action_refresh()
+
+    def action_refresh(self) -> None:
+        self._refresh_applications()
+        self._set_status("Applications refreshed.")
+
+    def _current_row(self) -> ApplicationRow | None:
+        if self.current_app_id is None:
+            return None
+        return next(
+            (a for a in self._applications if a.id == self.current_app_id), None
+        )
+
+    def action_save_yaml(self) -> None:
+        row = self._current_row()
+        if row is None or not row.resume_yaml_path:
+            self._set_status("No resume YAML path for this application.")
+            return
+        yaml_area = self.query_one("#apply-yaml", TextArea)
+        target = Path(row.resume_yaml_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(yaml_area.text, encoding="utf-8")
+        self._set_status(f"Saved YAML to {target}")
 
     def action_render_pdf(self) -> None:
-        if self.current_app_id is None:
+        row = self._current_row()
+        if row is None or not row.resume_yaml_path:
+            self._set_status("Save a resume YAML first (press 's').")
             return
-        self._set_status("Render requested; see T43 for full pipeline.")
+
         self.bus.publish(
-            ApplyProgressEvent(step="render_pdf", message="queued", job_id=self.current_app_id)
+            ApplyProgressEvent(
+                step="render_pdf",
+                message="rendering",
+                job_id=row.id,
+            )
         )
+
+        def _render() -> str:
+            from jobctl.generation.renderer import output_pdf_path, render_pdf
+
+            yaml_path = Path(row.resume_yaml_path)
+            pdf_path = render_pdf(
+                yaml_path,
+                getattr(self.app.config, "default_template", None),  # type: ignore[attr-defined]
+                output_pdf_path(yaml_path),
+            )
+            return str(pdf_path)
+
+        async def _do_render() -> None:
+            try:
+                pdf_path = await self.app.run_in_thread(_render)  # type: ignore[attr-defined]
+            except AttributeError:
+                # Older Textual versions: fall back to running in executor.
+                import asyncio
+
+                pdf_path = await asyncio.get_event_loop().run_in_executor(
+                    None, _render
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._set_status(f"Render failed: {exc}")
+                return
+            self._set_status(f"Rendered {pdf_path}")
+            self.bus.publish(
+                ApplyProgressEvent(
+                    step="render_pdf", message="done", job_id=row.id
+                )
+            )
+
+        self.run_worker(_do_render(), exclusive=False)
+
+    def action_open_pdf(self) -> None:
+        row = self._current_row()
+        if row is None or not row.resume_pdf_path:
+            self._set_status("No PDF rendered yet.")
+            return
+        import subprocess
+        import sys
+
+        pdf = Path(row.resume_pdf_path)
+        if not pdf.exists():
+            self._set_status(f"PDF not found: {pdf}")
+            return
+        try:
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", str(pdf)])
+            elif sys.platform.startswith("linux"):
+                subprocess.Popen(["xdg-open", str(pdf)])
+            else:
+                subprocess.Popen(["cmd", "/c", "start", "", str(pdf)], shell=True)
+            self._set_status(f"Opened {pdf}")
+        except Exception as exc:  # noqa: BLE001
+            self._set_status(f"Open failed: {exc}")
 
     def action_generate_cover(self) -> None:
         if self.current_app_id is None:

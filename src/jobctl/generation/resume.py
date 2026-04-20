@@ -64,12 +64,17 @@ def generate_resume_yaml(
     return llm_client.chat_structured(messages, response_format=ResumeYAML)
 
 
-def save_and_review(resume: ResumeYAML, output_dir: Path) -> Path | None:
+def save_and_review(
+    resume: ResumeYAML, output_dir: Path, *, interactive: bool = True
+) -> Path | None:
     """Write resume YAML and let the user continue, edit, or regenerate."""
     drafts_dir = output_dir / "artifacts" / "drafts"
     drafts_dir.mkdir(parents=True, exist_ok=True)
     output_path = drafts_dir / "resume.yaml"
     _write_resume_yaml(resume, output_path)
+
+    if not interactive:
+        return output_path
 
     console = Console()
     while True:

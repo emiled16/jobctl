@@ -63,12 +63,17 @@ def generate_cover_letter_yaml(
 def save_and_review_cover_letter(
     cover_letter: CoverLetterYAML,
     output_dir: Path,
+    *,
+    interactive: bool = True,
 ) -> Path | None:
     """Write cover letter YAML and let the user continue, edit, or regenerate."""
     drafts_dir = output_dir / "artifacts" / "drafts"
     drafts_dir.mkdir(parents=True, exist_ok=True)
     output_path = drafts_dir / "cover-letter.yaml"
     _write_cover_letter_yaml(cover_letter, output_path)
+
+    if not interactive:
+        return output_path
 
     console = Console()
     while True:

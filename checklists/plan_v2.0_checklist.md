@@ -71,10 +71,10 @@ Reference plan: `docs/plan-v2.md`
 
 ## M5: Apply Mode Integration
 
-- [ ] T41: Implement `apply_node` in `src/jobctl/agent/nodes/apply_node.py`
-- [ ] T42: Refactor `src/jobctl/jobs/apply_pipeline.py` to emit events instead of Rich prompts
-- [ ] T43: Implement `ApplyView` full Textual Screen in `src/jobctl/tui/views/apply.py`
-- [ ] T44: Implement `InlineConfirmCard` widget in `src/jobctl/tui/widgets/confirm_card.py`
+- [x] T41: Implement `apply_node` in `src/jobctl/agent/nodes/apply_node.py`
+- [x] T42: Refactor `src/jobctl/jobs/apply_pipeline.py` to emit events instead of Rich prompts
+- [x] T43: Implement `ApplyView` full Textual Screen in `src/jobctl/tui/views/apply.py`
+- [x] T44: Implement `InlineConfirmCard` widget in `src/jobctl/tui/widgets/confirm_card.py`
 
 ---
 

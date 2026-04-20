@@ -7,6 +7,7 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
+from jobctl.agent.nodes.apply_node import apply_node
 from jobctl.agent.nodes.chat_node import chat_node
 from jobctl.agent.nodes.confirm_node import wait_for_confirmation_node
 from jobctl.agent.nodes.curate_node import curate_node
@@ -14,6 +15,7 @@ from jobctl.agent.nodes.graph_qa_node import graph_qa_node
 from jobctl.agent.nodes.ingest_node import ingest_node
 from jobctl.agent.router import route
 from jobctl.agent.state import AgentState
+from jobctl.config import JobctlConfig
 from jobctl.core.events import AsyncEventBus
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
@@ -29,6 +31,7 @@ def build_graph(
     store: BackgroundJobStore | None = None,
     runner: BackgroundJobRunner | None = None,
     proposal_store: CurationProposalStore | None = None,
+    config: JobctlConfig | None = None,
 ) -> Any:
     """Return a compiled LangGraph graph bound to the given dependencies."""
 
@@ -72,6 +75,21 @@ def build_graph(
 
     graph.add_node("curate_node", _curate)
 
+    def _apply(state: AgentState) -> AgentState:
+        if store is None or runner is None or config is None:
+            return chat_node(state, provider=provider, bus=bus)
+        return apply_node(
+            state,
+            provider=provider,
+            conn=conn,
+            config=config,
+            store=store,
+            runner=runner,
+            bus=bus,
+        )
+
+    graph.add_node("apply_node", _apply)
+
     graph.set_conditional_entry_point(
         route,
         {
@@ -80,8 +98,7 @@ def build_graph(
             "wait_for_confirmation": "wait_for_confirmation",
             "ingest_node": "ingest_node",
             "curate_node": "curate_node",
-            # Placeholder until M5 lands.
-            "apply_node": "chat_node",
+            "apply_node": "apply_node",
         },
     )
     graph.add_edge("chat_node", END)
@@ -89,6 +106,7 @@ def build_graph(
     graph.add_edge("wait_for_confirmation", END)
     graph.add_edge("ingest_node", END)
     graph.add_edge("curate_node", END)
+    graph.add_edge("apply_node", END)
 
     return graph.compile()
 

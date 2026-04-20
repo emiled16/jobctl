@@ -27,6 +27,7 @@ class LangGraphRunner:
         session_id: str,
         store: Any | None = None,
         runner: Any | None = None,
+        config: Any | None = None,
     ) -> None:
         self.provider = provider
         self.conn = conn
@@ -34,6 +35,7 @@ class LangGraphRunner:
         self.session_id = session_id
         self.store = store
         self.runner = runner
+        self.config = config
         self._compiled: Any | None = None
 
     def _ensure_graph(self) -> Any:
@@ -46,6 +48,7 @@ class LangGraphRunner:
                 bus=self.bus,
                 store=self.store,
                 runner=self.runner,
+                config=self.config,
             )
         return self._compiled
 
