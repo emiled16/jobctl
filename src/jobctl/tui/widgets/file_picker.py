@@ -12,6 +12,7 @@ from textual.widget import Widget
 from textual.widgets import Button, DirectoryTree, Input, Static
 
 from jobctl.core.events import (
+    AgentDoneEvent,
     AsyncEventBus,
     ConfirmationAnsweredEvent,
     ConfirmationRequestedEvent,
@@ -162,13 +163,17 @@ class FilePicker(Vertical):
             self._submit_selection()
             return
         if event.button.id == "file-picker-cancel":
-            self.bus.publish(
-                ConfirmationAnsweredEvent(
-                    confirm_id=self.request.confirm_id,
-                    answer=False,
-                )
+            self.action_cancel()
+
+    def action_cancel(self) -> None:
+        self.bus.publish(AgentDoneEvent(role="assistant", content="Canceled."))
+        self.bus.publish(
+            ConfirmationAnsweredEvent(
+                confirm_id=self.request.confirm_id,
+                answer=False,
             )
-            self.remove()
+        )
+        self.remove()
 
 
 __all__ = ["FilePicker"]

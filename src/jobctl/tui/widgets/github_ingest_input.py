@@ -12,6 +12,7 @@ from textual.widgets import Button, Input, Static
 
 from jobctl.agent.state import make_workflow_request
 from jobctl.core.events import (
+    AgentDoneEvent,
     AsyncEventBus,
     ConfirmationAnsweredEvent,
     ConfirmationRequestedEvent,
@@ -78,6 +79,7 @@ class GitHubIngestInput(Vertical):
             self.action_cancel()
 
     def action_cancel(self) -> None:
+        self.bus.publish(AgentDoneEvent(role="assistant", content="Canceled."))
         self.bus.publish(
             ConfirmationAnsweredEvent(
                 confirm_id=self.request.confirm_id,

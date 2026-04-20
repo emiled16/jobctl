@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,7 @@ from textual.widgets import Input
 
 from jobctl.agent.state import WorkflowRequest
 from jobctl.config import JobctlConfig
-from jobctl.core.events import ConfirmationRequestedEvent
+from jobctl.core.events import AgentDoneEvent, ConfirmationRequestedEvent
 from jobctl.db.connection import get_connection
 from jobctl.tui.app import JobctlApp
 from jobctl.tui.views.chat import ChatView
@@ -107,5 +108,31 @@ async def test_resume_file_picker_submits_structured_workflow(tmp_path: Path) ->
 
         await app.action_quit()
 
+    if isinstance(app.conn, sqlite3.Connection):
+        app.conn.close()
+
+
+@pytest.mark.anyio
+async def test_resume_file_picker_cancel_is_visible(tmp_path: Path) -> None:
+    runner = _WorkflowRunner()
+    app = _make_app(tmp_path, runner)
+    queue = app.bus.subscribe()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.query_one(ChatView)._render_event(_request())
+        await pilot.pause()
+
+        app.query_one(FilePicker).action_cancel()
+        await pilot.pause()
+
+        canceled = await asyncio.wait_for(queue.get(), timeout=1.0)
+        while not isinstance(canceled, AgentDoneEvent):
+            canceled = await asyncio.wait_for(queue.get(), timeout=1.0)
+        assert canceled.content == "Canceled."
+
+        await app.action_quit()
+
+    app.bus.unsubscribe(queue)
     if isinstance(app.conn, sqlite3.Connection):
         app.conn.close()
