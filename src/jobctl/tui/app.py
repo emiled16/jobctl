@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -19,13 +17,7 @@ from jobctl.core.events import AsyncEventBus
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.llm.base import LLMProvider
-
-
-@dataclass
-class PaletteCommand:
-    label: str
-    description: str
-    action: Any
+from jobctl.tui.widgets.command_palette import PaletteCommand
 
 
 SCREEN_NAMES = ("chat", "graph", "tracker", "apply", "curate", "settings")
