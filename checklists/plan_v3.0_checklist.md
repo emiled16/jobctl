@@ -24,7 +24,7 @@ Reference plan: `plans/plan_v3.0.md`
 
 ## M3: Background Task Visibility And Spinner UX
 
-- [ ] T15: Add explicit background job lifecycle events with labels and phases
+- [x] T15: Add explicit background job lifecycle events with labels and phases
 - [ ] T16: Implement a reusable `SpinnerStatus` widget for active jobs
 - [ ] T17: Upgrade `ProgressPanel` into a useful background jobs dashboard
 - [ ] T18: Mark user-waiting jobs distinctly in spinner and sidebar

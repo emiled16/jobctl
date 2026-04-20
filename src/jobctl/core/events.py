@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,25 @@ class ApplyProgressEvent(JobctlEvent):
     job_id: str | None = None
 
 
+JobLifecyclePhase = Literal[
+    "queued",
+    "running",
+    "waiting_for_user",
+    "done",
+    "error",
+    "cancelled",
+]
+
+
+@dataclass(frozen=True)
+class JobLifecycleEvent(JobctlEvent):
+    job_id: str
+    kind: str
+    label: str
+    phase: JobLifecyclePhase
+    message: str = ""
+
+
 class AsyncEventBus:
     """Fan-out async pub/sub using one ``asyncio.Queue`` per subscriber.
 
@@ -154,4 +173,6 @@ __all__ = [
     "IngestErrorEvent",
     "IngestProgressEvent",
     "JobctlEvent",
+    "JobLifecycleEvent",
+    "JobLifecyclePhase",
 ]

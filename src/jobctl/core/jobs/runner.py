@@ -16,6 +16,8 @@ from jobctl.core.events import (
     ApplyProgressEvent,
     AsyncEventBus,
     IngestErrorEvent,
+    JobLifecycleEvent,
+    JobLifecyclePhase,
 )
 from jobctl.db.connection import get_connection
 from jobctl.core.jobs.store import BackgroundJobStore
@@ -54,10 +56,26 @@ class BackgroundJobRunner:
         /,
         *args: Any,
         source: str | None = None,
+        label: str | None = None,
         **kwargs: Any,
     ) -> Future[Any]:
         source_label = source or self._source_label
+        job_label = label or source_label.capitalize()
+        self._publish_lifecycle(
+            job_id,
+            kind=source_label,
+            label=job_label,
+            phase="queued",
+            message="Queued",
+        )
         self._store.update_job(job_id, state="running")
+        self._publish_lifecycle(
+            job_id,
+            kind=source_label,
+            label=job_label,
+            phase="running",
+            message="Running",
+        )
 
         def _target() -> Any:
             try:
@@ -65,11 +83,25 @@ class BackgroundJobRunner:
                 if inspect.iscoroutine(result):
                     result = asyncio.run(result)
                 self._update_job(job_id, state="done")
+                self._publish_lifecycle(
+                    job_id,
+                    kind=source_label,
+                    label=job_label,
+                    phase="done",
+                    message="Done",
+                )
                 return result
             except Exception as exc:
                 tb = traceback.format_exc()
                 logger.exception("background job %s failed", job_id)
                 self._update_job(job_id, state="failed", error=tb)
+                self._publish_lifecycle(
+                    job_id,
+                    kind=source_label,
+                    label=job_label,
+                    phase="error",
+                    message=str(exc),
+                )
                 if source_label == "apply":
                     self._bus.publish(
                         ApplyProgressEvent(
@@ -95,7 +127,16 @@ class BackgroundJobRunner:
             return False
         cancelled = future.cancel()
         if cancelled:
-            self._store.update_job(job_id, state="failed", error="cancelled")
+            self._store.update_job(job_id, state="cancelled", error="cancelled")
+            self._bus.publish(
+                JobLifecycleEvent(
+                    job_id=job_id,
+                    kind=self._source_label,
+                    label=self._source_label.capitalize(),
+                    phase="cancelled",
+                    message="Cancelled",
+                )
+            )
         return cancelled
 
     def active_jobs(self) -> list[str]:
@@ -116,6 +157,25 @@ class BackgroundJobRunner:
             return
         with closing(get_connection(self._db_path)) as conn:
             BackgroundJobStore(conn).update_job(job_id, state=state, error=error)
+
+    def _publish_lifecycle(
+        self,
+        job_id: str,
+        *,
+        kind: str,
+        label: str,
+        phase: JobLifecyclePhase,
+        message: str,
+    ) -> None:
+        self._bus.publish(
+            JobLifecycleEvent(
+                job_id=job_id,
+                kind=kind,
+                label=label,
+                phase=phase,
+                message=message,
+            )
+        )
 
 
 __all__ = ["BackgroundJobRunner"]
