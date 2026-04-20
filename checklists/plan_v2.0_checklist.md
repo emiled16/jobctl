@@ -16,7 +16,7 @@ Reference plan: `docs/plan-v2.md`
 - [x] T8: Implement `BackgroundJobRunner` in `src/jobctl/core/jobs/runner.py`
 - [x] T9: Implement `BackgroundJobStore` CRUD in `src/jobctl/core/jobs/store.py`
 - [x] T10: Add DB migrations 003–007 for new tables
-- [ ] T11: Write `LLMProvider` conformance test suite in `tests/llm/test_provider_conformance.py`
+- [x] T11: Write `LLMProvider` conformance test suite in `tests/llm/test_provider_conformance.py`
 
 ---
 
