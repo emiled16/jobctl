@@ -6,7 +6,7 @@ Reference plan: `docs/plan-v2.md`
 
 ## M0: LLM Provider Abstraction and Core Infrastructure
 
-- [ ] T1: Define `LLMProvider` protocol with message and response types in `src/jobctl/llm/base.py`
+- [x] T1: Define `LLMProvider` protocol with message and response types in `src/jobctl/llm/base.py`
 - [ ] T2: Implement `OpenAIProvider` class in `src/jobctl/llm/openai_provider.py`
 - [ ] T3: Implement `OllamaProvider` class in `src/jobctl/llm/ollama_provider.py`
 - [ ] T4: Refactor `CodexCLIProvider` from `src/jobctl/llm/client.py` to implement `LLMProvider`
