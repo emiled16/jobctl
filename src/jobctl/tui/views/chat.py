@@ -27,6 +27,7 @@ from jobctl.core.events import (
     AgentToolCallEvent,
     AgentTokenEvent,
     AsyncEventBus,
+    ConfirmationRequestedEvent,
     JobctlEvent,
 )
 
@@ -211,6 +212,13 @@ class ChatView(Screen):
         if isinstance(event, AgentToolCallEvent):
             pretty_args = ", ".join(f"{k}={v!r}" for k, v in event.args.items())
             log.write(Markdown(f"_tool call: `{event.name}({pretty_args})`_"))
+            return
+        if isinstance(event, ConfirmationRequestedEvent):
+            from jobctl.tui.widgets.confirm_card import InlineConfirmCard
+
+            card = InlineConfirmCard(event, bus=self.bus)
+            container = self.query_one(Vertical)
+            container.mount(card, before=self.query_one("#chat-input"))
             return
 
 
