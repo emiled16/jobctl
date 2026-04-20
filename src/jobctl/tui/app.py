@@ -127,9 +127,11 @@ class JobctlApp(App):
         from jobctl.tui.views.settings import SettingsView
         from jobctl.tui.views.tracker import TrackerView
         from jobctl.tui.widgets.progress_panel import ProgressPanel
+        from jobctl.tui.widgets.spinner_status import SpinnerStatus
 
         yield Header(show_clock=False)
         yield Static(self._header_meta(), id="app-header-meta")
+        yield SpinnerStatus(self.bus, id="spinner-status")
 
         with Horizontal(id="main-layout"):
             with ContentSwitcher(initial=self.start_screen, id="main-switcher"):
