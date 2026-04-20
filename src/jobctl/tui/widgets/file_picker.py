@@ -17,7 +17,7 @@ from jobctl.core.events import (
 )
 
 
-class FilePicker(Widget):
+class FilePicker(Vertical):
     """Inline file picker combining a directory tree with a path input."""
 
     DEFAULT_CSS = """
@@ -79,12 +79,33 @@ class FilePicker(Widget):
     def on_mount(self) -> None:
         self._input = self.query_one("#file-picker-input", Input)
         self._tree = self.query_one("#file-picker-tree", DirectoryTree)
+        self._input.focus()
 
     def on_directory_tree_file_selected(
         self, event: DirectoryTree.FileSelected
     ) -> None:
         if self._input is not None:
             self._input.value = str(event.path)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "file-picker-input":
+            return
+        event.stop()
+        self._submit_selection()
+
+    def _submit_selection(self) -> None:
+        path = self._current_path()
+        payload = {"path": str(path) if path else ""}
+        if path is not None:
+            self.post_message(self.FileSelected(self, path))
+        self.bus.publish(
+            ConfirmationAnsweredEvent(
+                confirm_id=self.request.confirm_id,
+                answer=path is not None,
+                payload=payload,
+            )
+        )
+        self.remove()
 
     def _current_path(self) -> Path | None:
         if self._input is None:
@@ -96,18 +117,7 @@ class FilePicker(Widget):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "file-picker-select":
-            path = self._current_path()
-            payload = {"path": str(path) if path else ""}
-            if path is not None:
-                self.post_message(self.FileSelected(self, path))
-            self.bus.publish(
-                ConfirmationAnsweredEvent(
-                    confirm_id=self.request.confirm_id,
-                    answer=path is not None,
-                    payload=payload,
-                )
-            )
-            self.remove()
+            self._submit_selection()
             return
         if event.button.id == "file-picker-cancel":
             self.bus.publish(

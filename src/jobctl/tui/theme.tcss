@@ -38,6 +38,12 @@ Footer {
 
 #main-layout {
     height: 1fr;
+    layout: horizontal;
+}
+
+#main-switcher {
+    width: 1fr;
+    height: 1fr;
 }
 
 #sidebar {

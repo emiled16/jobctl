@@ -5,29 +5,30 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from textual.app import ComposeResult
-from textual.binding import Binding
-from textual.screen import Screen
+from textual.containers import Vertical
 from textual.widgets import Label, Static
 
 from jobctl.config import JobctlConfig
 
 
-class SettingsView(Screen):
+class SettingsView(Vertical):
     """Read-only summary of the project configuration."""
 
-    BINDINGS = [
-        Binding("escape", "app.pop_screen", "Back"),
-    ]
+    DEFAULT_CSS = """
+    SettingsView { height: 1fr; padding: 1; }
+    #settings-title { color: #89b4fa; text-style: bold; }
+    #settings-body { padding-top: 1; }
+    """
 
-    def __init__(self, config: JobctlConfig) -> None:
-        super().__init__()
+    def __init__(self, config: JobctlConfig, *, id: str | None = None) -> None:
+        super().__init__(id=id)
         self.config = config
 
     def compose(self) -> ComposeResult:
         yield Label("Settings", id="settings-title")
-        yield Static(self._render(), id="settings-body")
+        yield Static(self._render_body(), id="settings-body")
 
-    def _render(self) -> str:
+    def _render_body(self) -> str:
         data = asdict(self.config)
         lines: list[str] = []
         lines.append(f"provider: {self.config.llm.provider}")

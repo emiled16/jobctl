@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Static
@@ -17,7 +17,7 @@ from jobctl.core.events import (
 )
 
 
-class MultiSelectList(Widget):
+class MultiSelectList(Vertical):
     """Render a list of checkbox items with a confirm/cancel button row."""
 
     DEFAULT_CSS = """

@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Label, Static
+from textual.widgets import ContentSwitcher, Footer, Header, Label, Static
 
 from jobctl.config import JobctlConfig
 from jobctl.core.events import AsyncEventBus
@@ -55,16 +55,33 @@ class JobctlApp(App):
     CSS_PATH = "theme.tcss"
 
     BINDINGS = [
-        Binding("ctrl+b", "toggle_sidebar", "Sidebar", show=False),
-        Binding("g,c", "show_chat", "Chat"),
-        Binding("g,g", "show_graph", "Graph"),
-        Binding("g,t", "show_tracker", "Tracker"),
-        Binding("g,a", "show_apply", "Apply"),
-        Binding("g,u", "show_curate", "Curate"),
-        Binding("g,comma", "show_settings", "Settings"),
+        # Priority bindings work everywhere, even while typing in an input.
+        Binding("ctrl+b", "toggle_sidebar", "Sidebar", show=False, priority=True),
+        Binding("ctrl+p", "open_command_palette", "Palette", priority=True),
+        Binding("ctrl+j", "show_chat", "Chat", priority=True),
+        Binding("ctrl+g", "show_graph", "Graph", priority=True),
+        Binding("ctrl+t", "show_tracker", "Tracker", priority=True),
+        Binding("ctrl+r", "show_apply", "Apply", priority=True),
+        Binding("ctrl+e", "show_curate", "Curate", priority=True),
+        Binding("ctrl+s", "show_settings", "Settings", priority=True),
+        Binding("escape", "blur_focus", "Defocus", show=False, priority=True),
+        Binding("ctrl+q", "quit_with_confirm", "Quit", priority=True),
+        # Function-key aliases (only useful on keyboards with dedicated F-keys).
+        Binding("f1", "show_chat", "Chat", show=False),
+        Binding("f2", "show_graph", "Graph", show=False),
+        Binding("f3", "show_tracker", "Tracker", show=False),
+        Binding("f4", "show_apply", "Apply", show=False),
+        Binding("f5", "show_curate", "Curate", show=False),
+        Binding("f6", "show_settings", "Settings", show=False),
+        # Vim-style chord bindings: only fire when no Input is focused.
+        Binding("g,c", "show_chat", "Chat", show=False),
+        Binding("g,g", "show_graph", "Graph", show=False),
+        Binding("g,t", "show_tracker", "Tracker", show=False),
+        Binding("g,a", "show_apply", "Apply", show=False),
+        Binding("g,u", "show_curate", "Curate", show=False),
+        Binding("g,comma", "show_settings", "Settings", show=False),
         Binding("colon", "open_command_palette", "Palette", show=False),
         Binding("question_mark", "open_help", "Help"),
-        Binding("q", "quit_with_confirm", "Quit"),
     ]
 
     def __init__(
@@ -95,32 +112,53 @@ class JobctlApp(App):
         self._palette_commands: list[PaletteCommand] = []
         self.pending_chat_message: str | None = initial_message
         self._runner = None
+        self._current_view: str = start_screen
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        yield Static(self._header_meta(), id="app-header-meta")
+        from jobctl.tui.views.apply import ApplyView
+        from jobctl.tui.views.chat import ChatView
+        from jobctl.tui.views.curate import CurateView
+        from jobctl.tui.views.graph import GraphView
+        from jobctl.tui.views.settings import SettingsView
+        from jobctl.tui.views.tracker import TrackerView
         from jobctl.tui.widgets.progress_panel import ProgressPanel
 
+        yield Header(show_clock=False)
+        yield Static(self._header_meta(), id="app-header-meta")
+
         with Horizontal(id="main-layout"):
+            with ContentSwitcher(initial=self.start_screen, id="main-switcher"):
+                yield ChatView(self.bus, id="chat")
+                yield GraphView(self.conn, provider=self.provider, id="graph")
+                yield TrackerView(self.conn, id="tracker")
+                yield ApplyView(self.conn, self.provider, self.bus, id="apply")
+                yield CurateView(self.conn, self.job_runner, id="curate")
+                yield SettingsView(self.config, id="settings")
             with Vertical(id="sidebar"):
                 yield Label("Background jobs", id="sidebar-title")
                 yield ProgressPanel(self.bus)
+
         yield Footer()
 
     def _header_meta(self) -> str:
         return (
             f"[b]{self.project_root.name}[/b]  "
-            f"mode: [cyan]{self.start_screen}[/cyan]  "
+            f"mode: [cyan]{self._current_view}[/cyan]  "
             f"llm: [green]{self.config.llm.provider}[/green]/"
             f"{self.config.llm.chat_model}"
         )
 
+    def _refresh_header_meta(self) -> None:
+        try:
+            self.query_one("#app-header-meta", Static).update(self._header_meta())
+        except Exception:
+            pass
+
     def on_mount(self) -> None:
         self.title = f"jobctl - {self.project_root}"
         self.bus.attach_loop(self._get_event_loop())
-        self._install_screens()
         self._register_default_palette_commands()
-        self.push_screen(self.start_screen)
+        self._show_view(self.start_screen, initial=True)
 
     def _get_event_loop(self):
         import asyncio
@@ -129,21 +167,6 @@ class JobctlApp(App):
             return asyncio.get_event_loop()
         except RuntimeError:
             return asyncio.new_event_loop()
-
-    def _install_screens(self) -> None:
-        from jobctl.tui.views.apply import ApplyView
-        from jobctl.tui.views.chat import ChatView
-        from jobctl.tui.views.curate import CurateView
-        from jobctl.tui.views.graph import GraphView
-        from jobctl.tui.views.settings import SettingsView
-        from jobctl.tui.views.tracker import TrackerView
-
-        self.install_screen(ChatView(), name="chat")
-        self.install_screen(GraphView(self.conn, provider=self.provider), name="graph")
-        self.install_screen(TrackerView(self.conn), name="tracker")
-        self.install_screen(ApplyView(self.conn, self.provider, self.bus), name="apply")
-        self.install_screen(CurateView(self.conn, self.job_runner), name="curate")
-        self.install_screen(SettingsView(self.config), name="settings")
 
     @property
     def agent_runner(self):
@@ -173,7 +196,7 @@ class JobctlApp(App):
                 PaletteCommand(
                     label=f"View: {name.capitalize()}",
                     description=f"Switch to the {name} view",
-                    action=(lambda n=name: self.switch_screen(n)),
+                    action=(lambda n=name: self._show_view(n)),
                 )
             )
         for slash in ("/ingest resume", "/ingest github", "/curate", "/apply", "/mode"):
@@ -185,32 +208,77 @@ class JobctlApp(App):
                 )
             )
 
+    def _show_view(self, name: str, *, initial: bool = False) -> None:
+        if name not in SCREEN_NAMES:
+            return
+        switcher = self.query_one("#main-switcher", ContentSwitcher)
+        if switcher.current != name:
+            switcher.current = name
+        self._current_view = name
+        self._refresh_header_meta()
+        if name == "chat":
+            self._focus_chat_input()
+            if initial:
+                self._handle_initial_chat_message()
+
+    def _focus_chat_input(self) -> None:
+        try:
+            from textual.widgets import Input
+
+            self.query_one("#chat-input", Input).focus()
+        except Exception:
+            pass
+
+    def _handle_initial_chat_message(self) -> None:
+        if not self.pending_chat_message:
+            return
+        from jobctl.tui.views.chat import ChatView
+
+        try:
+            chat = self.query_one(ChatView)
+        except Exception:
+            return
+        message = self.pending_chat_message
+        self.pending_chat_message = None
+        chat._handle_submission(str(message))
+
     def dispatch_slash(self, command: str) -> None:
-        # ChatView subscribes for slash forwarding; stash for pickup.
         self.pending_slash = command
-        self.switch_screen("chat")
+        self._show_view("chat")
+        from jobctl.tui.views.chat import ChatView
+
+        try:
+            chat = self.query_one(ChatView)
+            chat._handle_pending_slash_if_any()
+        except Exception:
+            pass
 
     def action_show_chat(self) -> None:
-        self.switch_screen("chat")
+        self._show_view("chat")
 
     def action_show_graph(self) -> None:
-        self.switch_screen("graph")
+        self._show_view("graph")
 
     def action_show_tracker(self) -> None:
-        self.switch_screen("tracker")
+        self._show_view("tracker")
 
     def action_show_apply(self) -> None:
-        self.switch_screen("apply")
+        self._show_view("apply")
 
     def action_show_curate(self) -> None:
-        self.switch_screen("curate")
+        self._show_view("curate")
 
     def action_show_settings(self) -> None:
-        self.switch_screen("settings")
+        self._show_view("settings")
 
     def action_toggle_sidebar(self) -> None:
         sidebar = self.query_one("#sidebar")
         sidebar.toggle_class("-visible")
+
+    def action_blur_focus(self) -> None:
+        focused = self.focused
+        if focused is not None:
+            self.set_focus(None)
 
     def action_open_command_palette(self) -> None:
         from jobctl.tui.widgets.command_palette import CommandPaletteOverlay

@@ -67,16 +67,20 @@ jobctl                     # launch the TUI (same as jobctl --tui)
 
 ## Inside the TUI
 
-| View     | Shortcut | Purpose                                                        |
-| -------- | -------- | -------------------------------------------------------------- |
-| Chat     | `g c`    | Talk to the LangGraph agent; slash commands dispatch actions.  |
-| Graph    | `g g`    | Browse the knowledge graph, edit nodes, inspect sources.       |
-| Tracker  | `g t`    | Review applications, cycle status, open PDFs, add follow-ups.  |
-| Apply    | `g a`    | See JD + fit evaluation, edit YAML, render PDFs, open in OS.   |
-| Curate   | `g u`    | Accept / reject / edit agent-proposed merges and rephrases.    |
-| Settings | `g ,`    | Read-only project and provider configuration summary.          |
+| View     | Shortcut          | Purpose                                                        |
+| -------- | ----------------- | -------------------------------------------------------------- |
+| Chat     | `Ctrl-J` / `g c`  | Talk to the LangGraph agent; slash commands dispatch actions.  |
+| Graph    | `Ctrl-G` / `g g`  | Browse the knowledge graph, edit nodes, inspect sources.       |
+| Tracker  | `Ctrl-T` / `g t`  | Review applications, cycle status, open PDFs, add follow-ups.  |
+| Apply    | `Ctrl-R` / `g a`  | See JD + fit evaluation, edit YAML, render PDFs, open in OS.   |
+| Curate   | `Ctrl-E` / `g u`  | Accept / reject / edit agent-proposed merges and rephrases.    |
+| Settings | `Ctrl-S` / `g ,`  | Read-only project and provider configuration summary.          |
 
-Global shortcuts: `:` opens the command palette, `?` opens the keybinding overlay, `Ctrl-B` toggles the background-jobs sidebar, `q` quits (with confirmation if background jobs are active).
+The `Ctrl-` shortcuts always switch views (they work even while typing in the chat input). The `g`-chord shortcuts only fire when no text input is focused — press `Esc` first to defocus. `F1`–`F6` are also bound as aliases for keyboards with dedicated function keys.
+
+Global shortcuts: `Ctrl-P` (or `:`) opens the command palette, `?` opens the keybinding overlay, `Ctrl-B` toggles the background-jobs sidebar, `Esc` defocuses the current input, `Ctrl-Q` quits (with confirmation if background jobs are active).
+
+Inside the command palette: `Up` / `Down` (or `Ctrl-N` / `Ctrl-P`) move the selection while typing the filter, `Enter` runs the highlighted command, `Esc` closes.
 
 Chat slash commands: `/mode`, `/ingest resume`, `/ingest github`, `/curate`, `/apply`, `/graph`, `/report coverage`, `/report summary`, `/help`, `/quit`.
 

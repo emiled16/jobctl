@@ -21,7 +21,6 @@ from typing import Any
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Label, ProgressBar, Select, Static, TextArea
 
 from jobctl.core.events import ApplyProgressEvent, AsyncEventBus
@@ -83,7 +82,7 @@ def _maybe_json(raw: str | None) -> dict[str, Any] | None:
         return None
 
 
-class ApplyView(Screen):
+class ApplyView(Vertical):
     BINDINGS = [
         Binding("p", "render_pdf", "Render PDF"),
         Binding("o", "open_pdf", "Open PDF"),
@@ -93,6 +92,7 @@ class ApplyView(Screen):
     ]
 
     DEFAULT_CSS = """
+    ApplyView { height: 1fr; }
     #apply-header { padding: 0 1; color: #a6adc8; }
     #apply-body { height: 1fr; }
     #apply-left { width: 40%; padding: 1; }
@@ -106,8 +106,10 @@ class ApplyView(Screen):
         conn: sqlite3.Connection,
         provider: LLMProvider,
         bus: AsyncEventBus,
+        *,
+        id: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(id=id)
         self.conn = conn
         self.provider = provider
         self.bus = bus
@@ -117,7 +119,7 @@ class ApplyView(Screen):
     def compose(self) -> ComposeResult:
         yield Label("Apply", id="apply-title")
         yield Static("", id="apply-header")
-        yield Select([], id="apply-select", allow_blank=False)
+        yield Select([], id="apply-select", allow_blank=True, prompt="No applications yet")
         with Horizontal(id="apply-body"):
             with Vertical(id="apply-left"):
                 yield Label("Job description")

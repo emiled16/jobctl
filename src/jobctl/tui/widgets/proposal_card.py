@@ -8,14 +8,13 @@ from typing import Any
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
-from textual.widget import Widget
 from textual.widgets import Button, Label, Static, TextArea
 
 from jobctl.curation.proposals import Proposal
 from jobctl.curation.rephrase import compute_diff_lines
 
 
-class CurationProposalCard(Widget):
+class CurationProposalCard(Vertical):
     """Render a :class:`Proposal` with accept/reject/edit controls."""
 
     DEFAULT_CSS = """
@@ -104,10 +103,7 @@ class CurationProposalCard(Widget):
                 f"{payload.get('target_id')}"
             )
         if self.proposal.kind == "prune":
-            return (
-                f"Prune node {payload.get('node_id')}\n"
-                f"Reason: {payload.get('reason', '')}"
-            )
+            return f"Prune node {payload.get('node_id')}\nReason: {payload.get('reason', '')}"
         return json.dumps(payload, indent=2)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

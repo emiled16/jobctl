@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass, field
 
 from textual.containers import Vertical
-from textual.widget import Widget
 from textual.widgets import Label, ProgressBar, Static
 
 from jobctl.core.events import (
@@ -92,7 +91,7 @@ class _JobCard(Vertical):
         return f"running ({elapsed}s)"
 
 
-class ProgressPanel(Widget):
+class ProgressPanel(Vertical):
     """Tracks active and recent background jobs in the right sidebar."""
 
     DEFAULT_CSS = """

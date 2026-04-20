@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -51,6 +52,12 @@ class CommandPaletteOverlay(ModalScreen[None]):
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Close"),
         Binding("enter", "activate", "Run"),
+        Binding("down", "cursor_down", "Down", show=False, priority=True),
+        Binding("up", "cursor_up", "Up", show=False, priority=True),
+        Binding("pagedown", "page_down", "Page down", show=False, priority=True),
+        Binding("pageup", "page_up", "Page up", show=False, priority=True),
+        Binding("ctrl+n", "cursor_down", "Down", show=False, priority=True),
+        Binding("ctrl+p", "cursor_up", "Up", show=False, priority=True),
     ]
 
     def __init__(self, commands: list[PaletteCommand]) -> None:
@@ -98,6 +105,30 @@ class CommandPaletteOverlay(ModalScreen[None]):
             command = self._filtered[index]
             self.app.pop_screen()
             command.action()
+
+    def _move_index(self, delta: int) -> None:
+        list_view = self.query_one("#palette-list", ListView)
+        if not self._filtered:
+            return
+        current = list_view.index or 0
+        new_index = max(0, min(len(self._filtered) - 1, current + delta))
+        list_view.index = new_index
+        # Re-trigger description refresh for the new selection.
+        self.query_one("#palette-description", Static).update(
+            self._filtered[new_index].description
+        )
+
+    def action_cursor_down(self) -> None:
+        self._move_index(1)
+
+    def action_cursor_up(self) -> None:
+        self._move_index(-1)
+
+    def action_page_down(self) -> None:
+        self._move_index(10)
+
+    def action_page_up(self) -> None:
+        self._move_index(-10)
 
     def _refresh_list(self, query: str) -> None:
         scored = [

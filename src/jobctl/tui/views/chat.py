@@ -15,12 +15,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from rich.markdown import Markdown
-from textual import events
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import Screen
-from textual.widgets import RichLog, TextArea
+from textual.widgets import Input, RichLog
 
 from jobctl.core.events import (
     AgentDoneEvent,
@@ -44,16 +41,18 @@ class _PendingStreamMessage:
     line_index: int | None = None
 
 
-class ChatView(Screen):
-    """Chat screen with RichLog message history and TextArea input."""
+class ChatView(Vertical):
+    """Chat panel with RichLog message history and Input prompt."""
 
-    BINDINGS = [
-        Binding("ctrl+enter", "submit_message", "Send", show=False),
-    ]
+    # The chat Input emits ``Input.Submitted`` on Enter; we deliberately
+    # avoid a screen-level ``enter`` binding so other inline widgets (file
+    # picker, multi-select, confirm card) can handle Enter themselves.
+    BINDINGS: list = []
 
     DEFAULT_CSS = """
     ChatView {
         layout: vertical;
+        height: 1fr;
     }
     ChatView #chat-log {
         height: 1fr;
@@ -62,14 +61,20 @@ class ChatView(Screen):
         padding: 1 2;
     }
     ChatView #chat-input {
-        height: 6;
+        height: 3;
         border: solid #45475a;
         background: #1e1e2e;
+        color: #cdd6f4;
+    }
+    ChatView #chat-input:focus {
+        border: solid #89b4fa;
     }
     """
 
-    def __init__(self, bus: AsyncEventBus | None = None) -> None:
-        super().__init__()
+    def __init__(
+        self, bus: AsyncEventBus | None = None, *, id: str | None = None
+    ) -> None:
+        super().__init__(id=id)
         self._explicit_bus = bus
         self._subscription: asyncio.Queue[JobctlEvent] | None = None
         self._pump_task: asyncio.Task[None] | None = None
@@ -87,7 +92,7 @@ class ChatView(Screen):
     def compose(self) -> ComposeResult:
         yield Vertical(
             RichLog(id="chat-log", wrap=True, markup=True, highlight=False),
-            TextArea(id="chat-input"),
+            Input(id="chat-input", placeholder="Type a message and press Enter…"),
         )
 
     def on_mount(self) -> None:
@@ -96,13 +101,12 @@ class ChatView(Screen):
         log = self.query_one("#chat-log", RichLog)
         log.write(
             Markdown(
-                "**Chat view** — type a message and press `Ctrl+Enter` "
-                "to send. Try `/help` for available slash commands."
+                "**Chat view** — type a message and press `Enter` to send. "
+                "Try `/help` for available slash commands."
             )
         )
+        self.query_one("#chat-input", Input).focus()
         self._restore_session_history()
-        self._handle_pending_slash_if_any()
-        self._handle_pending_chat_message_if_any()
 
     def _restore_session_history(self) -> None:
         app = self.app
@@ -176,19 +180,22 @@ class ChatView(Screen):
         app.pending_chat_message = None
         self._handle_submission(str(pending))
 
-    def on_key(self, event: events.Key) -> None:
-        if event.key == "enter" and not event.shift:
-            editor = self.query_one("#chat-input", TextArea)
-            if editor.has_focus:
-                event.stop()
-                self.action_submit_message()
-
-    def action_submit_message(self) -> None:
-        editor = self.query_one("#chat-input", TextArea)
-        text = editor.text.strip()
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "chat-input":
+            return
+        event.stop()
+        text = event.value.strip()
         if not text:
             return
-        editor.text = ""
+        event.input.value = ""
+        self._handle_submission(text)
+
+    def action_submit_message(self) -> None:
+        editor = self.query_one("#chat-input", Input)
+        text = editor.value.strip()
+        if not text:
+            return
+        editor.value = ""
         self._handle_submission(text)
 
     def _handle_submission(self, text: str) -> None:

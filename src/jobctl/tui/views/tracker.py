@@ -13,7 +13,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen, Screen
+from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Input, Label, Select, Static, TextArea
 
 from datetime import datetime, timezone
@@ -83,7 +83,7 @@ class InlineApplyForm(ModalScreen[dict[str, Any] | None]):
             self.dismiss(None)
 
 
-class TrackerView(Screen):
+class TrackerView(Vertical):
     """Applications DataTable with inline new-application form and follow-up colouring."""
 
     BINDINGS = [
@@ -94,8 +94,12 @@ class TrackerView(Screen):
         Binding("o", "open_pdf", "Open PDF"),
     ]
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        super().__init__()
+    DEFAULT_CSS = """
+    TrackerView { height: 1fr; }
+    """
+
+    def __init__(self, conn: sqlite3.Connection, *, id: str | None = None) -> None:
+        super().__init__(id=id)
         self.conn = conn
         self.current_app_id: str | None = None
 

@@ -28,30 +28,33 @@ def _make_app(tmp_path: Path) -> JobctlApp:
 
 @pytest.mark.asyncio
 async def test_tui_boots_and_navigates_all_views(tmp_path: Path) -> None:
+    from textual.widgets import ContentSwitcher
+
     app = _make_app(tmp_path)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert app.screen.__class__.__name__ == "ChatView"
+        switcher = app.query_one("#main-switcher", ContentSwitcher)
+        assert switcher.current == "chat"
 
-        await pilot.press("g", "t")
+        await pilot.press("ctrl+t")
         await pilot.pause()
-        assert app.screen.__class__.__name__ == "TrackerView"
+        assert switcher.current == "tracker"
 
-        await pilot.press("g", "g")
+        await pilot.press("ctrl+g")
         await pilot.pause()
-        assert app.screen.__class__.__name__ == "GraphView"
+        assert switcher.current == "graph"
 
-        await pilot.press("g", "u")
+        await pilot.press("ctrl+e")
         await pilot.pause()
-        assert app.screen.__class__.__name__ == "CurateView"
+        assert switcher.current == "curate"
 
-        await pilot.press("g", "a")
+        await pilot.press("ctrl+r")
         await pilot.pause()
-        assert app.screen.__class__.__name__ == "ApplyView"
+        assert switcher.current == "apply"
 
-        await pilot.press("g", "comma")
+        await pilot.press("ctrl+s")
         await pilot.pause()
-        assert app.screen.__class__.__name__ == "SettingsView"
+        assert switcher.current == "settings"
 
         await app.action_quit()
 

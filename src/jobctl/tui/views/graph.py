@@ -9,7 +9,6 @@ import yaml
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Input, Label, Select, Static, TextArea, Tree
 
 from jobctl.db.graph import (
@@ -25,7 +24,7 @@ from jobctl.llm.adapter import as_embedding_client
 from jobctl.llm.base import LLMProvider
 
 
-class GraphView(Screen):
+class GraphView(Vertical):
     """Browse, edit, and curate the knowledge graph."""
 
     BINDINGS = [
@@ -38,6 +37,7 @@ class GraphView(Screen):
     ]
 
     DEFAULT_CSS = """
+    GraphView { height: 1fr; }
     #graph-summary { padding: 0 1; color: #a6adc8; }
     #graph-toolbar { height: 3; padding: 0 1; }
     #graph-search { width: 1fr; }
@@ -52,8 +52,9 @@ class GraphView(Screen):
         conn: sqlite3.Connection,
         *,
         provider: LLMProvider | None = None,
+        id: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(id=id)
         self.conn = conn
         self.provider = provider
         self.current_node_id: str | None = None

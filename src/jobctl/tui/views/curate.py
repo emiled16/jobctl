@@ -8,8 +8,7 @@ from collections import defaultdict
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import Screen
-from textual.widgets import Button, Collapsible, Footer, Header, Label, Static
+from textual.widgets import Button, Collapsible, Label, Static
 
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.curation.proposals import CurationProposalStore, Proposal
@@ -24,7 +23,7 @@ _KIND_LABELS = {
 }
 
 
-class CurateView(Screen):
+class CurateView(Vertical):
     BINDINGS = [
         Binding("r", "reload", "Reload", show=True),
         Binding("c", "run_curation", "Run curation", show=True),
@@ -32,6 +31,7 @@ class CurateView(Screen):
     ]
 
     DEFAULT_CSS = """
+    CurateView { height: 1fr; }
     #curate-toolbar {
         height: 3;
         padding: 0 1;
@@ -48,22 +48,24 @@ class CurateView(Screen):
     """
 
     def __init__(
-        self, conn: sqlite3.Connection, runner: BackgroundJobRunner
+        self,
+        conn: sqlite3.Connection,
+        runner: BackgroundJobRunner,
+        *,
+        id: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(id=id)
         self.conn = conn
         self.runner = runner
         self.store = CurationProposalStore(conn)
         self._focused_group: str | None = None
 
     def compose(self) -> ComposeResult:
-        yield Header()
         with Horizontal(id="curate-toolbar"):
             yield Button("Reload", id="btn-reload")
             yield Button("Run curation", id="btn-run", variant="primary")
             yield Label("", id="status")
         yield VerticalScroll(id="curate-content")
-        yield Footer()
 
     def on_mount(self) -> None:
         self._reload()
@@ -75,14 +77,7 @@ class CurateView(Screen):
         status = self.query_one("#status", Label)
         status.update("Curation run requested; triggering agent…")
         try:
-            from jobctl.app.common import _get_app  # type: ignore
-
-            _ = _get_app
-        except Exception:
-            pass
-        app = self.app
-        try:
-            runner = app.agent_runner  # type: ignore[attr-defined]
+            runner = self.app.agent_runner  # type: ignore[attr-defined]
         except Exception:
             status.update("Curation runner unavailable.")
             return

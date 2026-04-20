@@ -9,8 +9,8 @@ proposal-accept / multi-option variants live in their own widgets (see
 from __future__ import annotations
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widget import Widget
 from textual.widgets import Button, Static
 
 from jobctl.core.events import (
@@ -20,8 +20,14 @@ from jobctl.core.events import (
 )
 
 
-class InlineConfirmCard(Widget):
+class InlineConfirmCard(Vertical):
     """Render a single confirmation request with yes/no buttons."""
+
+    BINDINGS = [
+        Binding("y", "answer_yes", "Yes", show=False),
+        Binding("n", "answer_no", "No", show=False),
+        Binding("escape", "answer_no", "Cancel", show=False),
+    ]
 
     DEFAULT_CSS = """
     InlineConfirmCard {
@@ -58,11 +64,25 @@ class InlineConfirmCard(Widget):
             ),
         )
 
+    def on_mount(self) -> None:
+        self.focus()
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm-yes":
+            self._answer(True)
+        elif event.button.id == "confirm-no":
+            self._answer(False)
+
+    def action_answer_yes(self) -> None:
+        self._answer(True)
+
+    def action_answer_no(self) -> None:
+        self._answer(False)
+
+    def _answer(self, answer: bool) -> None:
         if self._answered:
             return
         self._answered = True
-        answer = event.button.id == "confirm-yes"
         self.bus.publish(
             ConfirmationAnsweredEvent(
                 confirm_id=self.request.confirm_id,
