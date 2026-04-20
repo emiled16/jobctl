@@ -6,6 +6,7 @@ import sqlite3
 import uuid
 from pathlib import Path
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -74,12 +75,7 @@ class JobctlApp(App):
         Binding("f5", "show_curate", "Curate", show=False),
         Binding("f6", "show_settings", "Settings", show=False),
         # Vim-style chord bindings: only fire when no Input is focused.
-        Binding("g,c", "show_chat", "Chat", show=False),
-        Binding("g,g", "show_graph", "Graph", show=False),
-        Binding("g,t", "show_tracker", "Tracker", show=False),
-        Binding("g,a", "show_apply", "Apply", show=False),
-        Binding("g,u", "show_curate", "Curate", show=False),
-        Binding("g,comma", "show_settings", "Settings", show=False),
+        Binding("g", "start_go_chord", "Go", show=False),
         Binding("colon", "open_command_palette", "Palette", show=False),
         Binding("question_mark", "open_help", "Help"),
     ]
@@ -121,6 +117,7 @@ class JobctlApp(App):
         self.pending_chat_message: str | None = initial_message
         self._runner = None
         self._current_view: str = start_screen
+        self._go_chord_pending = False
 
     def compose(self) -> ComposeResult:
         from jobctl.tui.views.apply import ApplyView
@@ -255,6 +252,24 @@ class JobctlApp(App):
         self.pending_chat_message = None
         chat._handle_submission(str(message))
 
+    def on_key(self, event: events.Key) -> None:
+        if self.focused is not None or not self._go_chord_pending:
+            return
+        self._go_chord_pending = False
+        target_by_key = {
+            "c": "chat",
+            "g": "graph",
+            "t": "tracker",
+            "a": "apply",
+            "u": "curate",
+            "comma": "settings",
+        }
+        target = target_by_key.get(event.key)
+        if target is None:
+            return
+        event.stop()
+        self.show_view(target)
+
     def dispatch_slash(self, command: str) -> None:
         self.pending_slash = command
         self.show_view("chat")
@@ -283,6 +298,10 @@ class JobctlApp(App):
 
     def action_show_settings(self) -> None:
         self.show_view("settings")
+
+    def action_start_go_chord(self) -> None:
+        if self.focused is None:
+            self._go_chord_pending = True
 
     def action_toggle_sidebar(self) -> None:
         sidebar = self.query_one("#sidebar")
