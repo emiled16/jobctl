@@ -1,8 +1,16 @@
-"""Local Codex CLI LLM client wrapper."""
+"""Local Codex CLI LLM client wrapper.
+
+Deprecated:
+    Use :class:`jobctl.llm.codex_provider.CodexCLIProvider` (and the other
+    providers under ``jobctl.llm``) instead. This module is retained for
+    backward compatibility with callers that have not yet migrated to the
+    :class:`jobctl.llm.base.LLMProvider` protocol.
+"""
 
 import json
 import subprocess
 import tempfile
+import warnings
 from collections.abc import Callable, Iterator
 from copy import deepcopy
 from pathlib import Path
@@ -21,6 +29,13 @@ _EMBEDDERS: dict[str, "TransformerEmbedder"] = {}
 
 
 class LLMClient:
+    """Deprecated direct subprocess wrapper.
+
+    New code should use :class:`jobctl.llm.codex_provider.CodexCLIProvider` or
+    another :class:`jobctl.llm.base.LLMProvider` implementation obtained from
+    :func:`jobctl.llm.registry.get_provider`.
+    """
+
     def __init__(
         self,
         api_key: str,
@@ -29,6 +44,12 @@ class LLMClient:
         cwd: Path | None = None,
         runner: CodexRunner | None = None,
     ) -> None:
+        warnings.warn(
+            "jobctl.llm.client.LLMClient is deprecated; use "
+            "jobctl.llm.codex_provider.CodexCLIProvider or another LLMProvider.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.model = model
         self.codex_binary = codex_binary
         self.cwd = cwd

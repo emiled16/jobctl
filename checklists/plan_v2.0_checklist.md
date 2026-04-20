@@ -9,7 +9,7 @@ Reference plan: `docs/plan-v2.md`
 - [x] T1: Define `LLMProvider` protocol with message and response types in `src/jobctl/llm/base.py`
 - [x] T2: Implement `OpenAIProvider` class in `src/jobctl/llm/openai_provider.py`
 - [x] T3: Implement `OllamaProvider` class in `src/jobctl/llm/ollama_provider.py`
-- [ ] T4: Refactor `CodexCLIProvider` from `src/jobctl/llm/client.py` to implement `LLMProvider`
+- [x] T4: Refactor `CodexCLIProvider` from `src/jobctl/llm/client.py` to implement `LLMProvider`
 - [ ] T5: Implement `LLMProviderRegistry` in `src/jobctl/llm/registry.py`
 - [ ] T6: Refactor `JobctlConfig` to support a nested `llm` provider block
 - [ ] T7: Implement `AsyncEventBus` with typed event dataclasses in `src/jobctl/core/events.py`
