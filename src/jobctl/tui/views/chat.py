@@ -390,6 +390,10 @@ class ChatView(Vertical):
 
                 items = list(event.payload.get("items") or [])
                 widget = MultiSelectList(event, items, bus=self.bus)
+            elif event.kind == "github_user":
+                from jobctl.tui.widgets.github_ingest_input import GitHubIngestInput
+
+                widget = GitHubIngestInput(event, bus=self.bus)
             else:
                 from jobctl.tui.widgets.confirm_card import InlineConfirmCard
 
