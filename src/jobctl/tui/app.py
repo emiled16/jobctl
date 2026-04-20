@@ -182,6 +182,8 @@ class JobctlApp(App):
                 conn=self.conn,
                 bus=self.bus,
                 session_id=self.session_id,
+                store=self.job_store,
+                runner=self.job_runner,
             )
         return self._runner
 

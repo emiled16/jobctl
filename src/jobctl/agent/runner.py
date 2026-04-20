@@ -25,11 +25,15 @@ class LangGraphRunner:
         conn: sqlite3.Connection,
         bus: AsyncEventBus,
         session_id: str,
+        store: Any | None = None,
+        runner: Any | None = None,
     ) -> None:
         self.provider = provider
         self.conn = conn
         self.bus = bus
         self.session_id = session_id
+        self.store = store
+        self.runner = runner
         self._compiled: Any | None = None
 
     def _ensure_graph(self) -> Any:
@@ -37,7 +41,11 @@ class LangGraphRunner:
             from jobctl.agent.graph import build_graph
 
             self._compiled = build_graph(
-                provider=self.provider, conn=self.conn, bus=self.bus
+                provider=self.provider,
+                conn=self.conn,
+                bus=self.bus,
+                store=self.store,
+                runner=self.runner,
             )
         return self._compiled
 

@@ -10,9 +10,12 @@ from langgraph.graph import END, StateGraph
 from jobctl.agent.nodes.chat_node import chat_node
 from jobctl.agent.nodes.confirm_node import wait_for_confirmation_node
 from jobctl.agent.nodes.graph_qa_node import graph_qa_node
+from jobctl.agent.nodes.ingest_node import ingest_node
 from jobctl.agent.router import route
 from jobctl.agent.state import AgentState
 from jobctl.core.events import AsyncEventBus
+from jobctl.core.jobs.runner import BackgroundJobRunner
+from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.llm.base import LLMProvider
 
 
@@ -21,6 +24,8 @@ def build_graph(
     provider: LLMProvider,
     conn: sqlite3.Connection,
     bus: AsyncEventBus,
+    store: BackgroundJobStore | None = None,
+    runner: BackgroundJobRunner | None = None,
 ) -> Any:
     """Return a compiled LangGraph graph bound to the given dependencies."""
 
@@ -33,10 +38,24 @@ def build_graph(
     async def _wait(state: AgentState) -> AgentState:
         return await wait_for_confirmation_node(state, bus=bus)
 
+    def _ingest(state: AgentState) -> AgentState:
+        if store is None or runner is None:
+            # Fall back to chat if background infra is missing.
+            return chat_node(state, provider=provider, bus=bus)
+        return ingest_node(
+            state,
+            provider=provider,
+            conn=conn,
+            store=store,
+            runner=runner,
+            bus=bus,
+        )
+
     graph: StateGraph[AgentState] = StateGraph(AgentState)
     graph.add_node("chat_node", _chat)
     graph.add_node("graph_qa_node", _graph_qa)
     graph.add_node("wait_for_confirmation", _wait)
+    graph.add_node("ingest_node", _ingest)
 
     graph.set_conditional_entry_point(
         route,
@@ -44,8 +63,8 @@ def build_graph(
             "chat_node": "chat_node",
             "graph_qa_node": "graph_qa_node",
             "wait_for_confirmation": "wait_for_confirmation",
-            # M3+: ingest/curate/apply nodes are added dynamically later.
-            "ingest_node": "chat_node",
+            "ingest_node": "ingest_node",
+            # Placeholders until M4/M5 land.
             "curate_node": "chat_node",
             "apply_node": "chat_node",
         },
@@ -53,6 +72,7 @@ def build_graph(
     graph.add_edge("chat_node", END)
     graph.add_edge("graph_qa_node", END)
     graph.add_edge("wait_for_confirmation", END)
+    graph.add_edge("ingest_node", END)
 
     return graph.compile()
 

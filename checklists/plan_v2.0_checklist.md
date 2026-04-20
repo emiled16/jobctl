@@ -48,7 +48,7 @@ Reference plan: `docs/plan-v2.md`
 
 ## M3: Ingest Mode and Resumable Ingestion
 
-- [ ] T28: Implement `ingest_node` orchestrator in `src/jobctl/agent/nodes/ingest_node.py`
+- [x] T28: Implement `ingest_node` orchestrator in `src/jobctl/agent/nodes/ingest_node.py`
 - [x] T29: Implement `FilePicker` inline Textual widget in `src/jobctl/tui/widgets/file_picker.py`
 - [x] T30: Implement `MultiSelectList` inline Textual widget in `src/jobctl/tui/widgets/multi_select.py`
 - [x] T31: Refactor `src/jobctl/ingestion/resume.py` to emit `IngestProgressEvent` and write checkpoints
