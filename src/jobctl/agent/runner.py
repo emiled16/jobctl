@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any
 
 from jobctl.agent.session import load_session, save_session
 from jobctl.agent.state import (
     AgentState,
+    AgentMode,
     WorkflowRequest,
     new_state,
     store_workflow_request,
@@ -114,6 +116,32 @@ class LangGraphRunner:
             logger.exception("failed to persist agent session")
         return state
 
+    async def submit_mode_change(self, mode: AgentMode) -> AgentState:
+        """Ask for confirmation before persisting an agent mode change."""
+        state = self._load_state()
+        state["pending_confirmation"] = {
+            "question": f"Switch agent mode to `{mode}`?",
+            "confirm_id": uuid.uuid4().hex,
+            "kind": "mode_change",
+            "payload": {"mode": mode},
+        }
+
+        graph = self._ensure_graph()
+        try:
+            result = await graph.ainvoke(state)
+        except Exception:
+            logger.exception("LangGraph mode-change invocation failed")
+            raise
+
+        if isinstance(result, dict):
+            state = result  # type: ignore[assignment]
+
+        try:
+            save_session(self.conn, state)
+        except Exception:
+            logger.exception("failed to persist agent session")
+        return state
+
     def submit_background(
         self,
         user_message: str,
@@ -133,6 +161,16 @@ class LangGraphRunner:
         """Schedule :meth:`submit_workflow` on ``loop`` (default: running loop)."""
         target_loop = loop or asyncio.get_event_loop()
         return asyncio.run_coroutine_threadsafe(self.submit_workflow(request), target_loop)  # type: ignore[return-value]
+
+    def submit_mode_change_background(
+        self,
+        mode: AgentMode,
+        *,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> asyncio.Future[AgentState]:
+        """Schedule :meth:`submit_mode_change` on ``loop`` (default: running loop)."""
+        target_loop = loop or asyncio.get_event_loop()
+        return asyncio.run_coroutine_threadsafe(self.submit_mode_change(mode), target_loop)  # type: ignore[return-value]
 
 
 __all__ = ["LangGraphRunner"]

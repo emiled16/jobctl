@@ -62,6 +62,8 @@ async def wait_for_confirmation_node(
     request = ConfirmationRequestedEvent(
         question=pending["question"],
         confirm_id=pending["confirm_id"],
+        kind=str(pending.get("kind") or "yes_no"),
+        payload=dict(pending.get("payload") or {}),
     )
     bus.publish(request)
 
@@ -72,7 +74,7 @@ async def wait_for_confirmation_node(
 
     state["pending_confirmation"] = None
     if answer.answer:
-        mode = answer.payload.get("mode") if answer.payload else None
+        mode = answer.payload.get("mode") if answer.payload else pending.get("payload", {}).get("mode")
         if mode:
             state["mode"] = mode  # type: ignore[typeddict-item]
     return state

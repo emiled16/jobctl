@@ -42,3 +42,25 @@ async def test_submit_workflow_seeds_structured_request(tmp_path: Path) -> None:
     assert graph.state["last_tool_result"] == {"workflow_request": request}
     assert result["last_tool_result"] is None
     conn.close()
+
+
+@pytest.mark.anyio
+async def test_submit_mode_change_seeds_confirmation(tmp_path: Path) -> None:
+    conn = get_connection(tmp_path / ".jobctl.db")
+    graph = _CapturingGraph()
+    runner = LangGraphRunner(
+        provider=FakeLLMProvider(),
+        conn=conn,
+        bus=AsyncEventBus(),
+        session_id="test",
+    )
+    runner._compiled = graph  # type: ignore[attr-defined]
+
+    await runner.submit_mode_change("graph_qa")
+
+    assert graph.state is not None
+    pending = graph.state["pending_confirmation"]
+    assert pending is not None
+    assert pending["kind"] == "mode_change"
+    assert pending["payload"] == {"mode": "graph_qa"}
+    conn.close()

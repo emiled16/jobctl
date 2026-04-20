@@ -10,9 +10,10 @@ AgentMode = Literal["chat", "ingest", "curate", "apply", "graph_qa"]
 WorkflowKind = Literal["resume_ingest", "github_ingest", "apply"]
 
 
-class Confirmation(TypedDict):
+class Confirmation(TypedDict, total=False):
     question: str
     confirm_id: str
+    payload: dict[str, Any]
 
 
 class Coverage(TypedDict, total=False):
