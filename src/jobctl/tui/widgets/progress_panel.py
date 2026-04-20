@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from rich.text import Text
 from textual.containers import Vertical
 from textual.widgets import Label, ProgressBar, Static
 
@@ -60,26 +61,26 @@ class _JobCard(Vertical):
         self.entry = entry
 
     def compose(self):
-        yield Label(self.entry.label, classes="-title", id="title")
-        yield Label(self._phase_text(), id="phase")
+        yield Label(Text(self.entry.label), classes="-title", id="title")
+        yield Label(Text(self._phase_text()), id="phase")
         yield ProgressBar(
             total=max(self.entry.total or 1, 1),
             show_eta=False,
             show_percentage=True,
             id="bar",
         )
-        yield Label(self.entry.message or "starting...", classes="-msg", id="msg")
-        yield Label(self._status_text(), id="status")
+        yield Label(Text(self.entry.message or "starting..."), classes="-msg", id="msg")
+        yield Label(Text(self._status_text()), id="status")
 
     def refresh_entry(self) -> None:
         bar = self.query_one("#bar", ProgressBar)
         bar.total = max(self.entry.total or 1, 1)
         bar.progress = self.entry.current
-        self.query_one("#title", Label).update(self.entry.label)
-        self.query_one("#msg", Label).update(self.entry.message or "")
-        self.query_one("#phase", Label).update(self._phase_text())
+        self.query_one("#title", Label).update(Text(self.entry.label))
+        self.query_one("#msg", Label).update(Text(self.entry.message or ""))
+        self.query_one("#phase", Label).update(Text(self._phase_text()))
         status = self.query_one("#status", Label)
-        status.update(self._status_text())
+        status.update(Text(self._status_text()))
         status.remove_class("-status-done")
         status.remove_class("-status-error")
         if self.entry.state == "done":
@@ -125,6 +126,7 @@ class ProgressPanel(Vertical):
         self._queue = None
         self._pump_task = None
         self._has_active = False
+        self._max_message_chars = 240
 
     def compose(self):
         yield Static("No active jobs.", id="empty", classes="-empty")
@@ -181,7 +183,7 @@ class ProgressPanel(Vertical):
             entry.kind = event.kind
             entry.label = event.label
             entry.phase = event.phase
-            entry.message = event.message or entry.message
+            entry.message = self._compact_message(event.message) or entry.message
             if event.phase in {"queued", "running"}:
                 entry.state = "running"
             elif event.phase == "waiting_for_user":
@@ -195,7 +197,7 @@ class ProgressPanel(Vertical):
         elif isinstance(event, IngestProgressEvent):
             entry.current = event.current
             entry.total = max(event.total, 1)
-            entry.message = event.message or entry.message
+            entry.message = self._compact_message(event.message) or entry.message
             entry.phase = "running"
             entry.state = "running"
         elif isinstance(event, IngestDoneEvent):
@@ -206,12 +208,12 @@ class ProgressPanel(Vertical):
             entry.state = "done"
             entry.completed_at = time.monotonic()
         elif isinstance(event, IngestErrorEvent):
-            entry.message = event.error
+            entry.message = self._compact_message(event.error)
             entry.phase = "error"
             entry.state = "error"
             entry.completed_at = time.monotonic()
         elif isinstance(event, ApplyProgressEvent):
-            entry.message = event.message or event.step
+            entry.message = self._compact_message(event.message) or event.step
             if event.step == "done":
                 entry.phase = "done"
                 entry.state = "done"
@@ -274,6 +276,12 @@ class ProgressPanel(Vertical):
         if isinstance(event, ApplyProgressEvent):
             return "apply"
         return "job"
+
+    def _compact_message(self, message: str | None) -> str:
+        single_line = " ".join((message or "").split())
+        if len(single_line) <= self._max_message_chars:
+            return single_line
+        return f"{single_line[: self._max_message_chars - 1]}…"
 
 
 __all__ = ["ProgressPanel", "JobEntry"]

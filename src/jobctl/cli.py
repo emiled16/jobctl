@@ -31,7 +31,9 @@ def root(
     """AI-powered job search assistant."""
     if verbose and quiet:
         raise click.UsageError("Use either --verbose or --quiet, not both.")
-    level = logging.DEBUG if verbose else logging.ERROR if quiet else logging.INFO
+    # Keep default TUI sessions quiet to avoid log lines corrupting the
+    # terminal UI; opt into verbose traces with --verbose.
+    level = logging.DEBUG if verbose else logging.ERROR if quiet else logging.WARNING
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
     if ctx.invoked_subcommand is not None:

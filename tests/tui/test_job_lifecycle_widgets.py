@@ -120,3 +120,38 @@ async def test_sidebar_keeps_error_state_visible(tmp_path: Path) -> None:
 
     if isinstance(app.conn, sqlite3.Connection):
         app.conn.close()
+
+
+@pytest.mark.anyio
+async def test_spinner_handles_markup_like_error_message(tmp_path: Path) -> None:
+    app = _make_app(tmp_path)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        spinner = app.query_one(SpinnerStatus)
+
+        noisy_message = (
+            "643 validation errors for ExtractedProfile\n"
+            "facts.0.entity_type\n"
+            "Field required [type=missing, input_value={'type': 'role', 'role': 'Engineer'}]"
+        )
+        app.bus.publish(
+            JobLifecycleEvent(
+                job_id="job-markup",
+                kind="resume",
+                label="Resume ingest",
+                phase="error",
+                message=noisy_message,
+            )
+        )
+
+        await _wait_until(lambda: "validation errors for ExtractedProfile" in str(spinner.renderable))
+        rendered = str(spinner.renderable)
+        assert "validation errors for ExtractedProfile" in rendered
+        assert "\n" not in rendered
+        assert "input_value={'type': 'role'" in rendered
+
+        await app.action_quit()
+
+    if isinstance(app.conn, sqlite3.Connection):
+        app.conn.close()

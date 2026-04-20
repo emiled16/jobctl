@@ -18,7 +18,7 @@ from jobctl.core.events import (
     IngestProgressEvent,
 )
 from jobctl.core.jobs.store import BackgroundJobStore
-from jobctl.ingestion.resume import persist_facts
+from jobctl.ingestion.resume import _EXTRACTED_PROFILE_SCHEMA_GUIDANCE, persist_facts
 from jobctl.llm.schemas import ExtractedProfile
 
 logger = logging.getLogger(__name__)
@@ -124,7 +124,8 @@ def extract_facts_from_repo(repo_detail: dict, llm_client) -> ExtractedProfile:
             "content": (
                 "Extract career knowledge graph facts from GitHub repository metadata. Create "
                 "a Project fact, Skill facts for technologies, Achievement facts for metrics "
-                "or adoption, and relations connecting skills and achievements to the project."
+                "or adoption, and relations connecting skills and achievements to the project.\n\n"
+                + _EXTRACTED_PROFILE_SCHEMA_GUIDANCE
             ),
         },
         {
@@ -177,7 +178,10 @@ def ingest_github(
         try:
             repo_detail = fetcher.get_repo_detail(owner, repo)
         except Exception as exc:  # noqa: BLE001
-            logger.exception("github fetch failed for %s", external_id)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.exception("github fetch failed for %s", external_id)
+            else:
+                logger.error("github fetch failed for %s: %s", external_id, exc)
             if bus is not None:
                 bus.publish(IngestErrorEvent(source="github", error=str(exc), job_id=job_id))
             continue
@@ -218,7 +222,10 @@ def ingest_github(
                     external_updated_at=updated_at,
                 )
         except Exception as exc:  # noqa: BLE001
-            logger.exception("github persist failed for %s", external_id)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.exception("github persist failed for %s", external_id)
+            else:
+                logger.error("github persist failed for %s: %s", external_id, exc)
             if bus is not None:
                 bus.publish(IngestErrorEvent(source="github", error=str(exc), job_id=job_id))
             continue

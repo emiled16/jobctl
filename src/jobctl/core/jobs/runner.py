@@ -93,7 +93,10 @@ class BackgroundJobRunner:
                 return result
             except Exception as exc:
                 tb = traceback.format_exc()
-                logger.exception("background job %s failed", job_id)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.exception("background job %s failed", job_id)
+                else:
+                    logger.error("background job %s failed: %s", job_id, exc)
                 self._update_job(job_id, state="failed", error=tb)
                 self._publish_lifecycle(
                     job_id,

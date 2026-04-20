@@ -242,6 +242,13 @@ class JobctlApp(App):
                 action=lambda: self.dispatch_slash("/mode"),
             )
         )
+        self.register_command(
+            PaletteCommand(
+                label="Slash: /jobs",
+                description="List recent background job statuses",
+                action=lambda: self.dispatch_slash("/jobs"),
+            )
+        )
 
     def show_view(self, name: str, *, initial: bool = False) -> None:
         """Switch the main content area to a named app view."""

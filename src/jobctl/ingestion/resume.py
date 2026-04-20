@@ -37,6 +37,25 @@ SUPPORTED_RESUME_EXTENSIONS = frozenset({".txt", ".md", ".pdf", ".docx"})
 
 console = Console()
 
+_EXTRACTED_PROFILE_SCHEMA_GUIDANCE = (
+    "Return strict JSON matching this schema:\n"
+    "{\n"
+    '  "facts": [\n'
+    "    {\n"
+    '      "entity_type": string,\n'
+    '      "entity_name": string,\n'
+    '      "relation": string | null,\n'
+    '      "related_to": string | null,\n'
+    '      "properties": object,\n'
+    '      "text_representation": string\n'
+    "    }\n"
+    "  ]\n"
+    "}\n"
+    "Allowed fact keys are exactly: entity_type, entity_name, relation, related_to, "
+    "properties, text_representation. Do not use legacy keys like type, name, "
+    "description, source_context, start_date, end_date, company, metrics."
+)
+
 
 def read_resume(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
@@ -57,7 +76,8 @@ def extract_facts_from_resume(resume_text: str, llm_client) -> ExtractedProfile:
                 "Extract a career knowledge graph from the resume. Create facts for roles, "
                 "companies, skills, achievements, education, and projects. Use relation and "
                 "related_to when a fact should connect to another entity by name. Keep "
-                "properties structured with dates, metrics, descriptions, and source context."
+                "properties structured with dates, metrics, descriptions, and source context.\n\n"
+                + _EXTRACTED_PROFILE_SCHEMA_GUIDANCE
             ),
         },
         {"role": "user", "content": resume_text},
@@ -125,7 +145,10 @@ def persist_facts(
                 store.mark_item_done(job_id, external_id=external_id)
             _publish_progress(bus, job_id, index, total, accepted_fact.entity_name)
         except Exception as exc:  # noqa: BLE001 - surface to bus, do not swallow
-            logger.exception("persist_facts failed on %s", external_id)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.exception("persist_facts failed on %s", external_id)
+            else:
+                logger.error("persist_facts failed on %s: %s", external_id, exc)
             if bus is not None:
                 bus.publish(IngestErrorEvent(source="resume", error=str(exc), job_id=job_id))
 
