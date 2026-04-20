@@ -205,14 +205,41 @@ class JobctlApp(App):
                     action=(lambda n=name: self.show_view(n)),
                 )
             )
-        for slash in ("/ingest resume", "/ingest github", "/curate", "/apply", "/mode"):
-            self.register_command(
-                PaletteCommand(
-                    label=f"Slash: {slash}",
-                    description=f"Send {slash} to the agent",
-                    action=(lambda s=slash: self.dispatch_slash(s)),
-                )
+        self.register_command(
+            PaletteCommand(
+                label="Workflow: Ingest resume",
+                description="Choose a resume file and start ingestion",
+                action=self.open_resume_ingest_input,
             )
+        )
+        self.register_command(
+            PaletteCommand(
+                label="Workflow: Ingest GitHub",
+                description="Enter GitHub targets and start ingestion",
+                action=self.open_github_ingest_input,
+            )
+        )
+        self.register_command(
+            PaletteCommand(
+                label="Workflow: Apply",
+                description="Enter a job URL or description and start apply",
+                action=self.open_apply_input,
+            )
+        )
+        self.register_command(
+            PaletteCommand(
+                label="Workflow: Curate",
+                description="Switch to the Curate view",
+                action=lambda: self.show_view("curate"),
+            )
+        )
+        self.register_command(
+            PaletteCommand(
+                label="Slash: /mode",
+                description="Show or change the agent mode",
+                action=lambda: self.dispatch_slash("/mode"),
+            )
+        )
 
     def show_view(self, name: str, *, initial: bool = False) -> None:
         """Switch the main content area to a named app view."""
@@ -280,6 +307,25 @@ class JobctlApp(App):
             chat._handle_pending_slash_if_any()
         except Exception:
             pass
+
+    def _with_chat_view(self, callback_name: str) -> None:
+        self.show_view("chat")
+        from jobctl.tui.views.chat import ChatView
+
+        try:
+            chat = self.query_one(ChatView)
+            getattr(chat, callback_name)()
+        except Exception:
+            pass
+
+    def open_resume_ingest_input(self) -> None:
+        self._with_chat_view("open_resume_picker")
+
+    def open_github_ingest_input(self) -> None:
+        self._with_chat_view("open_github_ingest_input")
+
+    def open_apply_input(self) -> None:
+        self._with_chat_view("open_apply_input")
 
     def action_show_chat(self) -> None:
         self.show_view("chat")
