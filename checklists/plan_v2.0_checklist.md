@@ -37,7 +37,7 @@ Reference plan: `docs/plan-v2.md`
 
 - [x] T20: Define `AgentState` TypedDict and `AgentMode` literal in `src/jobctl/agent/state.py`
 - [x] T21: Implement the router node that classifies user intent in `src/jobctl/agent/router.py`
-- [ ] T22: Implement `chat_node` with streaming LLM responses in `src/jobctl/agent/nodes/chat_node.py`
+- [x] T22: Implement `chat_node` with streaming LLM responses in `src/jobctl/agent/nodes/chat_node.py`
 - [ ] T23: Implement `graph_qa_node` with `search_nodes` and vector-search tools in `src/jobctl/agent/nodes/graph_qa_node.py`
 - [ ] T24: Implement mode-switch confirmation flow using `ConfirmationRequestedEvent` and `ConfirmationAnsweredEvent`
 - [ ] T25: Persist `AgentState` per-session to `agent_sessions` table; reload on `JobctlApp` start
