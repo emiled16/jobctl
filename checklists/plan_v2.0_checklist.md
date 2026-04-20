@@ -63,9 +63,9 @@ Reference plan: `docs/plan-v2.md`
 - [x] T35: Implement `CurationDuplicateDetector` in `src/jobctl/curation/duplicates.py`
 - [x] T36: Implement `CurationProposalStore` CRUD in `src/jobctl/curation/proposals.py`
 - [x] T37: Implement `BulletRephraser` in `src/jobctl/curation/rephrase.py`
-- [ ] T38: Implement `curate_node` in `src/jobctl/agent/nodes/curate_node.py`
-- [ ] T39: Implement `CurateView` Textual Screen in `src/jobctl/tui/views/curate.py`
-- [ ] T40: Implement `CurationProposalCard` widget in `src/jobctl/tui/widgets/proposal_card.py`
+- [x] T38: Implement `curate_node` in `src/jobctl/agent/nodes/curate_node.py`
+- [x] T39: Implement `CurateView` Textual Screen in `src/jobctl/tui/views/curate.py`
+- [x] T40: Implement `CurationProposalCard` widget in `src/jobctl/tui/widgets/proposal_card.py`
 
 ---
 
