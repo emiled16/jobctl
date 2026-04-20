@@ -84,26 +84,23 @@ def copy_bundled_templates(destination: Path) -> None:
                     shutil.copyfile(source_path, target_dir / template.name)
 
 
-def run_tui(start_screen: str) -> None:
+def run_tui(start_screen: str = "chat") -> None:
     try:
         project_root = find_project_root(Path.cwd())
         config = load_config(project_root)
         from jobctl.db.connection import get_connection
-        from jobctl.llm.client import LLMClient
+        from jobctl.llm.registry import get_provider
         from jobctl.tui.app import JobctlApp
 
-        llm_client = LLMClient(
-            api_key=config.openai_api_key,
-            model=config.llm_model,
-            cwd=project_root,
-        )
+        provider = get_provider(config, cwd=project_root)
         conn = get_connection(project_root / CONFIG_DIR_NAME / "jobctl.db")
         try:
             JobctlApp(
                 conn=conn,
                 project_root=project_root,
+                config=config,
+                provider=provider,
                 start_screen=start_screen,
-                llm_client=llm_client,
             ).run()
         finally:
             conn.close()

@@ -12,4 +12,4 @@ def profile(ctx: typer.Context) -> None:
     """Inspect the stored career profile."""
     if ctx.invoked_subcommand is not None:
         return
-    run_tui(start_screen="profile")
+    run_tui(start_screen="graph")
