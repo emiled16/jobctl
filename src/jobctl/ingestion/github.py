@@ -179,14 +179,14 @@ def ingest_github(
         except Exception as exc:  # noqa: BLE001
             logger.exception("github fetch failed for %s", external_id)
             if bus is not None:
-                bus.publish(
-                    IngestErrorEvent(source="github", error=str(exc), job_id=job_id)
-                )
+                bus.publish(IngestErrorEvent(source="github", error=str(exc), job_id=job_id))
             continue
 
         updated_at = repo_detail.get("updated_at")
-        if store is not None and job_id is not None and store.is_item_seen(
-            job_id, external_id=external_id, external_updated_at=updated_at
+        if (
+            store is not None
+            and job_id is not None
+            and store.is_item_seen(job_id, external_id=external_id, external_updated_at=updated_at)
         ):
             if bus is not None:
                 bus.publish(
@@ -220,9 +220,7 @@ def ingest_github(
         except Exception as exc:  # noqa: BLE001
             logger.exception("github persist failed for %s", external_id)
             if bus is not None:
-                bus.publish(
-                    IngestErrorEvent(source="github", error=str(exc), job_id=job_id)
-                )
+                bus.publish(IngestErrorEvent(source="github", error=str(exc), job_id=job_id))
             continue
 
         if bus is not None:
@@ -237,9 +235,7 @@ def ingest_github(
             )
 
     if bus is not None:
-        bus.publish(
-            IngestDoneEvent(source="github", facts_added=persisted_count, job_id=job_id)
-        )
+        bus.publish(IngestDoneEvent(source="github", facts_added=persisted_count, job_id=job_id))
     return persisted_count
 
 

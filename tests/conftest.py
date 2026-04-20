@@ -10,6 +10,11 @@ import pytest
 from jobctl.llm.base import ChatChunk, ChatResponse, Message, ToolSpec
 
 
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
 class FakeLLMProvider:
     """In-memory LLMProvider used throughout the test suite."""
 
@@ -46,7 +51,10 @@ class FakeLLMProvider:
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls.append({"kind": "embed", "texts": texts})
-        return [[float((i + j) % 7) for j in range(self.embedding_dimensions)] for i, _ in enumerate(texts)]
+        return [
+            [float((i + j) % 7) for j in range(self.embedding_dimensions)]
+            for i, _ in enumerate(texts)
+        ]
 
 
 @pytest.fixture

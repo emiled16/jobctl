@@ -10,9 +10,7 @@ from jobctl.agent.state import AgentState, Confirmation, new_state
 
 def _state_with_messages(*messages, **overrides) -> AgentState:
     state = new_state(session_id="test")
-    state["messages"] = [
-        {"role": role, "content": content} for role, content in messages
-    ]
+    state["messages"] = [{"role": role, "content": content} for role, content in messages]
     for key, value in overrides.items():
         state[key] = value  # type: ignore[typeddict-unknown-key]
     return state

@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from jobctl.agent.state import AgentState
-from jobctl.core.events import AsyncEventBus, AgentDoneEvent
+from jobctl.core.events import AgentDoneEvent, AsyncEventBus, IngestDoneEvent
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
+from jobctl.db.connection import get_connection
 from jobctl.llm.base import LLMProvider, Message
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def start_resume_ingest(
     store: BackgroundJobStore,
     runner: BackgroundJobRunner,
     resume_path: Path,
+    db_path: Path | None = None,
 ) -> str:
     """Kick off a resume ingest in the background; return the job id."""
     job_id = store.create_job(
@@ -47,37 +49,48 @@ def start_resume_ingest(
             read_resume,
         )
 
-        text = read_resume(resume_path)
+        worker_conn = conn
+        worker_store = store
+        if db_path is not None:
+            worker_conn = get_connection(db_path)
+            worker_store = BackgroundJobStore(worker_conn)
 
-        class _Shim:
-            def chat_structured(self, messages, response_format):
-                response = provider.chat(messages)
-                import json
+        try:
+            text = read_resume(resume_path)
 
-                content = response.get("content") or "{}"
-                try:
-                    payload = json.loads(content)
-                except json.JSONDecodeError:
-                    payload = {"facts": []}
-                return response_format.model_validate(payload)
+            class _Shim:
+                def chat_structured(self, messages, response_format):
+                    response = provider.chat(messages)
+                    import json
 
-            def get_embedding(self, text):
-                return provider.embed([text])[0]
+                    content = response.get("content") or "{}"
+                    try:
+                        payload = json.loads(content)
+                    except json.JSONDecodeError:
+                        payload = {"facts": []}
+                    return response_format.model_validate(payload)
 
-        shim = _Shim()
-        profile = extract_facts_from_resume(text, shim)
-        added = persist_facts(
-            conn,
-            profile.facts,
-            shim,
-            interactive=False,
-            bus=bus,
-            store=store,
-            job_id=job_id,
-        )
-        return {"facts_added": added}
+                def get_embedding(self, text):
+                    return provider.embed([text])[0]
 
-    runner.submit(job_id, _do_ingest)
+            shim = _Shim()
+            profile = extract_facts_from_resume(text, shim)
+            added = persist_facts(
+                worker_conn,
+                profile.facts,
+                shim,
+                interactive=False,
+                bus=bus,
+                store=worker_store,
+                job_id=job_id,
+            )
+            bus.publish(IngestDoneEvent(source="resume", facts_added=added, job_id=job_id))
+            return {"facts_added": added}
+        finally:
+            if db_path is not None:
+                worker_conn.close()
+
+    runner.submit(job_id, _do_ingest, source="resume")
     return job_id
 
 
@@ -90,6 +103,7 @@ def start_github_ingest(
     runner: BackgroundJobRunner,
     username_or_urls: list[str],
     preselected_repos: list[tuple[str, str]] | None = None,
+    db_path: Path | None = None,
 ) -> str:
     job_id = store.create_job(
         source_type="github",
@@ -103,34 +117,45 @@ def start_github_ingest(
     def _do_ingest() -> dict[str, Any]:
         from jobctl.ingestion.github import ingest_github
 
-        class _Shim:
-            def chat_structured(self, messages, response_format):
-                import json
+        worker_conn = conn
+        worker_store = store
+        if db_path is not None:
+            worker_conn = get_connection(db_path)
+            worker_store = BackgroundJobStore(worker_conn)
 
-                response = provider.chat(messages)
-                content = response.get("content") or "{}"
-                try:
-                    payload = json.loads(content)
-                except json.JSONDecodeError:
-                    payload = {"facts": []}
-                return response_format.model_validate(payload)
+        try:
 
-            def get_embedding(self, text):
-                return provider.embed([text])[0]
+            class _Shim:
+                def chat_structured(self, messages, response_format):
+                    import json
 
-        added = ingest_github(
-            conn,
-            username_or_urls,
-            _Shim(),
-            interactive=False,
-            bus=bus,
-            store=store,
-            job_id=job_id,
-            preselected_repos=preselected_repos,
-        )
-        return {"facts_added": added}
+                    response = provider.chat(messages)
+                    content = response.get("content") or "{}"
+                    try:
+                        payload = json.loads(content)
+                    except json.JSONDecodeError:
+                        payload = {"facts": []}
+                    return response_format.model_validate(payload)
 
-    runner.submit(job_id, _do_ingest)
+                def get_embedding(self, text):
+                    return provider.embed([text])[0]
+
+            added = ingest_github(
+                worker_conn,
+                username_or_urls,
+                _Shim(),
+                interactive=False,
+                bus=bus,
+                store=worker_store,
+                job_id=job_id,
+                preselected_repos=preselected_repos,
+            )
+            return {"facts_added": added}
+        finally:
+            if db_path is not None:
+                worker_conn.close()
+
+    runner.submit(job_id, _do_ingest, source="github")
     return job_id
 
 
@@ -142,6 +167,7 @@ def ingest_node(
     store: BackgroundJobStore,
     runner: BackgroundJobRunner,
     bus: AsyncEventBus,
+    db_path: Path | None = None,
 ) -> AgentState:
     """Route ingest requests from ``state.last_tool_result`` into background jobs."""
     payload = state.get("last_tool_result") or {}
@@ -163,6 +189,7 @@ def ingest_node(
             store=store,
             runner=runner,
             resume_path=path,
+            db_path=db_path,
         )
         state["last_tool_result"] = None
         return _append_assistant(
@@ -183,6 +210,7 @@ def ingest_node(
             runner=runner,
             username_or_urls=usernames,
             preselected_repos=preselected,
+            db_path=db_path,
         )
         state["last_tool_result"] = None
         return _append_assistant(

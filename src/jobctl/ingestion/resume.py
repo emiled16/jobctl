@@ -18,7 +18,6 @@ from rich.syntax import Syntax
 
 from jobctl.core.events import (
     AsyncEventBus,
-    IngestDoneEvent,
     IngestErrorEvent,
     IngestProgressEvent,
 )
@@ -77,10 +76,10 @@ def persist_facts(
     """Persist ``facts`` into the graph and emit progress events.
 
     When ``bus`` + ``store`` + ``job_id`` are provided the function writes a
-    checkpoint per fact and publishes :class:`IngestProgressEvent`s,
-    :class:`IngestDoneEvent` / :class:`IngestErrorEvent` wrappers. Legacy
-    callers that omit those arguments keep the original Rich-prompt flow
-    for backwards compatibility while the v2 agent migrates.
+    checkpoint per fact and publishes :class:`IngestProgressEvent`s plus
+    :class:`IngestErrorEvent`s. Legacy callers that omit those arguments keep
+    the original Rich-prompt flow for backwards compatibility while the v2
+    agent migrates.
     """
     persisted_count = 0
     total = len(facts)
@@ -126,16 +125,8 @@ def persist_facts(
         except Exception as exc:  # noqa: BLE001 - surface to bus, do not swallow
             logger.exception("persist_facts failed on %s", external_id)
             if bus is not None:
-                bus.publish(
-                    IngestErrorEvent(
-                        source="resume", error=str(exc), job_id=job_id
-                    )
-                )
+                bus.publish(IngestErrorEvent(source="resume", error=str(exc), job_id=job_id))
 
-    if bus is not None:
-        bus.publish(
-            IngestDoneEvent(source="resume", facts_added=persisted_count, job_id=job_id)
-        )
     return persisted_count
 
 

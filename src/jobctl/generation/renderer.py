@@ -93,7 +93,9 @@ def list_template_names(yaml_path: Path, document_type: str = "resume") -> list[
         path = Path(template_dir)
         if not path.exists():
             continue
-        templates.update(child.name for child in path.glob("*.html") if _matches_type(child.name, document_type))
+        templates.update(
+            child.name for child in path.glob("*.html") if _matches_type(child.name, document_type)
+        )
     return sorted(templates)
 
 
@@ -125,7 +127,11 @@ def validate_material(
         explicitly_enabled = section_name in enabled_overrides or (
             config is not None and config.enabled
         )
-        if enabled and explicitly_enabled and not _has_section_content(base_context.get(section_name)):
+        if (
+            enabled
+            and explicitly_enabled
+            and not _has_section_content(base_context.get(section_name))
+        ):
             diagnostics.append(f"Section `{section_name}` is enabled but has no content.")
     return diagnostics
 

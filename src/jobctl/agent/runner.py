@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from jobctl.agent.session import load_session, save_session
@@ -28,6 +29,7 @@ class LangGraphRunner:
         store: Any | None = None,
         runner: Any | None = None,
         config: Any | None = None,
+        db_path: Path | None = None,
     ) -> None:
         self.provider = provider
         self.conn = conn
@@ -36,6 +38,7 @@ class LangGraphRunner:
         self.store = store
         self.runner = runner
         self.config = config
+        self.db_path = db_path
         self._compiled: Any | None = None
 
     def _ensure_graph(self) -> Any:
@@ -49,6 +52,7 @@ class LangGraphRunner:
                 store=self.store,
                 runner=self.runner,
                 config=self.config,
+                db_path=self.db_path,
             )
         return self._compiled
 
@@ -92,9 +96,7 @@ class LangGraphRunner:
     ) -> asyncio.Future[AgentState]:
         """Schedule :meth:`submit` on ``loop`` (default: running loop)."""
         target_loop = loop or asyncio.get_event_loop()
-        return asyncio.run_coroutine_threadsafe(
-            self.submit(user_message), target_loop
-        )  # type: ignore[return-value]
+        return asyncio.run_coroutine_threadsafe(self.submit(user_message), target_loop)  # type: ignore[return-value]
 
 
 __all__ = ["LangGraphRunner"]

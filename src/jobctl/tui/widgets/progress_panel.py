@@ -132,9 +132,7 @@ class ProgressPanel(Vertical):
             except Exception:  # pragma: no cover - defensive
                 import logging
 
-                logging.getLogger(__name__).exception(
-                    "ProgressPanel failed to render event"
-                )
+                logging.getLogger(__name__).exception("ProgressPanel failed to render event")
 
     def _key_for(self, event: JobctlEvent) -> str | None:
         if isinstance(event, (IngestProgressEvent, IngestDoneEvent, IngestErrorEvent)):
@@ -178,7 +176,14 @@ class ProgressPanel(Vertical):
             entry.completed_at = time.monotonic()
         elif isinstance(event, ApplyProgressEvent):
             entry.message = event.message or event.step
-            entry.state = "running"
+            if event.step == "done":
+                entry.state = "done"
+                entry.completed_at = time.monotonic()
+            elif event.step == "error":
+                entry.state = "error"
+                entry.completed_at = time.monotonic()
+            else:
+                entry.state = "running"
 
         self._refresh_card(entry)
         self._recompute_active()
@@ -195,9 +200,7 @@ class ProgressPanel(Vertical):
 
     def _refresh_card(self, entry: JobEntry) -> None:
         try:
-            card = self.query_one(
-                f"#job-{entry.key.replace(':', '-')}", _JobCard
-            )
+            card = self.query_one(f"#job-{entry.key.replace(':', '-')}", _JobCard)
         except Exception:
             return
         card.refresh_entry()
@@ -217,9 +220,7 @@ class ProgressPanel(Vertical):
             return
         if has_active and "-visible" not in sidebar.classes:
             sidebar.add_class("-visible")
-        if not has_active and not any(
-            e.state == "running" for e in self._entries.values()
-        ):
+        if not has_active and not any(e.state == "running" for e in self._entries.values()):
             # Keep sidebar open briefly but allow user to collapse.
             pass
 

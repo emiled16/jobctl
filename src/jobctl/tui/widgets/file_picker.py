@@ -81,9 +81,7 @@ class FilePicker(Vertical):
         self._tree = self.query_one("#file-picker-tree", DirectoryTree)
         self._input.focus()
 
-    def on_directory_tree_file_selected(
-        self, event: DirectoryTree.FileSelected
-    ) -> None:
+    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
         if self._input is not None:
             self._input.value = str(event.path)
 

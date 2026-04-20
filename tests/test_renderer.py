@@ -256,9 +256,7 @@ def test_init_copies_bundled_templates(tmp_path: Path) -> None:
         assert (root / ".jobctl" / "templates" / "resume" / "compact-resume.html").is_file()
         assert (root / ".jobctl" / "templates" / "resume" / "emile-resume.html").is_file()
         assert (root / ".jobctl" / "templates" / "resume" / "modern-resume.html").is_file()
-        assert (
-            root / ".jobctl" / "templates" / "cover-letters" / "cover-letter.html"
-        ).is_file()
+        assert (root / ".jobctl" / "templates" / "cover-letters" / "cover-letter.html").is_file()
 
 
 def _resume_data() -> dict:

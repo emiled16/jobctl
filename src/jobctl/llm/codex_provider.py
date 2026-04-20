@@ -7,9 +7,8 @@ same way as OpenAI or Ollama.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 from jobctl.llm.base import ChatChunk, ChatResponse, Message, ToolSpec
 from jobctl.llm.client import (  # noqa: F401 -- re-exported for backward compatibility

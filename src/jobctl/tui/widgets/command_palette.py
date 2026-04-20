@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -90,9 +89,7 @@ class CommandPaletteOverlay(ModalScreen[None]):
             return
         index = event.list_view.index or 0
         if 0 <= index < len(self._filtered):
-            self.query_one("#palette-description", Static).update(
-                self._filtered[index].description
-            )
+            self.query_one("#palette-description", Static).update(self._filtered[index].description)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.list_view.id == "palette-list":
@@ -114,9 +111,7 @@ class CommandPaletteOverlay(ModalScreen[None]):
         new_index = max(0, min(len(self._filtered) - 1, current + delta))
         list_view.index = new_index
         # Re-trigger description refresh for the new selection.
-        self.query_one("#palette-description", Static).update(
-            self._filtered[new_index].description
-        )
+        self.query_one("#palette-description", Static).update(self._filtered[new_index].description)
 
     def action_cursor_down(self) -> None:
         self._move_index(1)
@@ -134,8 +129,7 @@ class CommandPaletteOverlay(ModalScreen[None]):
         scored = [
             (score, cmd)
             for cmd in self.commands
-            if (score := _score(query, cmd.label)) >= 0
-            or (not query and True)
+            if (score := _score(query, cmd.label)) >= 0 or (not query and True)
         ]
         scored.sort(key=lambda pair: (pair[0], pair[1].label))
         self._filtered = [cmd for _, cmd in scored]

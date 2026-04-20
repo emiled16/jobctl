@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.markdown import Markdown
 from textual.app import ComposeResult
@@ -28,9 +28,6 @@ from jobctl.core.events import (
     JobctlEvent,
 )
 from jobctl.llm.base import Message
-
-if TYPE_CHECKING:  # pragma: no cover - import-time typing only
-    from jobctl.tui.app import JobctlApp
 
 
 @dataclass
@@ -71,9 +68,7 @@ class ChatView(Vertical):
     }
     """
 
-    def __init__(
-        self, bus: AsyncEventBus | None = None, *, id: str | None = None
-    ) -> None:
+    def __init__(self, bus: AsyncEventBus | None = None, *, id: str | None = None) -> None:
         super().__init__(id=id)
         self._explicit_bus = bus
         self._subscription: asyncio.Queue[JobctlEvent] | None = None

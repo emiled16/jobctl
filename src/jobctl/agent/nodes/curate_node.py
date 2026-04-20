@@ -48,10 +48,7 @@ def _load_short_nodes(conn: sqlite3.Connection, max_len: int = 50) -> list[dict[
         """,
         (max_len,),
     ).fetchall()
-    return [
-        {"id": r[0], "type": r[1], "name": r[2], "text_representation": r[3]}
-        for r in rows
-    ]
+    return [{"id": r[0], "type": r[1], "name": r[2], "text_representation": r[3]} for r in rows]
 
 
 def _propose_new_connections(
@@ -71,16 +68,14 @@ def _propose_new_connections(
     if len(rows) < 2:
         return []
 
-    summary = "\n".join(
-        f"- id={r[0]} type={r[1]} name={r[2]}" for r in rows
-    )
+    summary = "\n".join(f"- id={r[0]} type={r[1]} name={r[2]}" for r in rows)
     prompt = (
         "You are a knowledge-graph curator. Given the following nodes, "
         "propose up to "
         f"{limit} high-confidence new directed edges (source → relation → "
         "target) that are missing and factually supported. Return strict "
-        "JSON: {\"edges\": [{\"source_id\":..,\"target_id\":..,"
-        "\"relation\":..}]} with no prose.\n\n" + summary
+        'JSON: {"edges": [{"source_id":..,"target_id":..,'
+        '"relation":..}]} with no prose.\n\n' + summary
     )
     try:
         reply = provider.chat(

@@ -12,7 +12,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import ContentSwitcher, Footer, Header, Label, Static
 
-from jobctl.config import JobctlConfig
+from jobctl.config import CONFIG_DIR_NAME, JobctlConfig
 from jobctl.core.events import AsyncEventBus
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
@@ -94,6 +94,7 @@ class JobctlApp(App):
         bus: AsyncEventBus | None = None,
         job_store: BackgroundJobStore | None = None,
         job_runner: BackgroundJobRunner | None = None,
+        db_path: Path | None = None,
         start_screen: str = "chat",
         initial_message: str | None = None,
     ) -> None:
@@ -102,11 +103,18 @@ class JobctlApp(App):
             raise ValueError(f"Unknown start screen: {start_screen}")
         self.conn = conn
         self.project_root = project_root
+        self.db_path = (
+            db_path or _connection_path(conn) or project_root / CONFIG_DIR_NAME / "jobctl.db"
+        )
         self.config = config
         self.provider = provider
         self.bus = bus or AsyncEventBus()
         self.job_store = job_store or BackgroundJobStore(conn)
-        self.job_runner = job_runner or BackgroundJobRunner(self.job_store, self.bus)
+        self.job_runner = job_runner or BackgroundJobRunner(
+            self.job_store,
+            self.bus,
+            db_path=self.db_path,
+        )
         self.start_screen = start_screen
         self.session_id = uuid.uuid4().hex
         self._palette_commands: list[PaletteCommand] = []
@@ -181,6 +189,7 @@ class JobctlApp(App):
                 store=self.job_store,
                 runner=self.job_runner,
                 config=self.config,
+                db_path=self.db_path,
             )
         return self._runner
 
@@ -301,11 +310,20 @@ class JobctlApp(App):
                 self.exit()
 
         self.push_screen(
-            QuitConfirmScreen(
-                f"{len(active)} background job(s) running. Quit anyway?"
-            ),
+            QuitConfirmScreen(f"{len(active)} background job(s) running. Quit anyway?"),
             _handle,
         )
 
 
 __all__ = ["JobctlApp", "PaletteCommand"]
+
+
+def _connection_path(conn: sqlite3.Connection) -> Path | None:
+    try:
+        row = conn.execute("PRAGMA database_list").fetchone()
+    except sqlite3.Error:
+        return None
+    if row is None:
+        return None
+    path = row["file"] if isinstance(row, sqlite3.Row) else row[2]
+    return Path(path) if path else None

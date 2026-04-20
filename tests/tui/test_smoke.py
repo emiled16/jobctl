@@ -26,7 +26,7 @@ def _make_app(tmp_path: Path) -> JobctlApp:
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_tui_boots_and_navigates_all_views(tmp_path: Path) -> None:
     from textual.widgets import ContentSwitcher
 

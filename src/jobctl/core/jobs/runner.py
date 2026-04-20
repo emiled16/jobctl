@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import closing
 import inspect
 import logging
 import traceback
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from jobctl.core.events import (
+    ApplyProgressEvent,
     AsyncEventBus,
-    IngestDoneEvent,
     IngestErrorEvent,
 )
+from jobctl.db.connection import get_connection
 from jobctl.core.jobs.store import BackgroundJobStore
 
 logger = logging.getLogger(__name__)
@@ -24,9 +27,8 @@ class BackgroundJobRunner:
     """Run arbitrary callables in a thread pool and track their lifecycle.
 
     Each submission is identified by a job id (created via
-    :class:`BackgroundJobStore`). Successful returns trigger
-    ``IngestDoneEvent`` while uncaught exceptions persist the traceback
-    to the store and trigger ``IngestErrorEvent``.
+    :class:`BackgroundJobStore`). Domain code owns success/progress events;
+    this runner owns lifecycle persistence and fallback error events.
     """
 
     def __init__(
@@ -36,12 +38,14 @@ class BackgroundJobRunner:
         *,
         max_workers: int = 2,
         source_label: str = "ingest",
+        db_path: Path | None = None,
     ) -> None:
         self._store = store
         self._bus = bus
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._futures: dict[str, Future[Any]] = {}
         self._source_label = source_label
+        self._db_path = db_path
 
     def submit(
         self,
@@ -60,23 +64,24 @@ class BackgroundJobRunner:
                 result = fn(*args, **kwargs)
                 if inspect.iscoroutine(result):
                     result = asyncio.run(result)
-                self._store.update_job(job_id, state="done")
-                facts_added = int(result) if isinstance(result, int) else 0
-                self._bus.publish(
-                    IngestDoneEvent(
-                        source=source_label,
-                        facts_added=facts_added,
-                        job_id=job_id,
-                    )
-                )
+                self._update_job(job_id, state="done")
                 return result
             except Exception as exc:
                 tb = traceback.format_exc()
                 logger.exception("background job %s failed", job_id)
-                self._store.update_job(job_id, state="failed", error=tb)
-                self._bus.publish(
-                    IngestErrorEvent(source=source_label, error=str(exc), job_id=job_id)
-                )
+                self._update_job(job_id, state="failed", error=tb)
+                if source_label == "apply":
+                    self._bus.publish(
+                        ApplyProgressEvent(
+                            step="error",
+                            message=str(exc),
+                            job_id=job_id,
+                        )
+                    )
+                else:
+                    self._bus.publish(
+                        IngestErrorEvent(source=source_label, error=str(exc), job_id=job_id)
+                    )
                 raise
 
         future = self._executor.submit(_target)
@@ -98,6 +103,19 @@ class BackgroundJobRunner:
 
     def shutdown(self, *, wait: bool = True) -> None:
         self._executor.shutdown(wait=wait)
+
+    def _update_job(
+        self,
+        job_id: str,
+        *,
+        state: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        if self._db_path is None:
+            self._store.update_job(job_id, state=state, error=error)
+            return
+        with closing(get_connection(self._db_path)) as conn:
+            BackgroundJobStore(conn).update_job(job_id, state=state, error=error)
 
 
 __all__ = ["BackgroundJobRunner"]

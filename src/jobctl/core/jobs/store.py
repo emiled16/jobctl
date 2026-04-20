@@ -152,9 +152,7 @@ class BackgroundJobStore:
             )
 
     def get_job(self, job_id: str) -> JobRecord | None:
-        row = self._conn.execute(
-            "SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
         return _row_to_job(row)
 
     def find_pending_job(

@@ -38,9 +38,7 @@ def _load_embeddings(conn: sqlite3.Connection) -> list[tuple[str, list[float]]]:
         try:
             import sqlite_vec  # lazy
 
-            rows = conn.execute(
-                "SELECT node_id, embedding FROM node_embeddings"
-            ).fetchall()
+            rows = conn.execute("SELECT node_id, embedding FROM node_embeddings").fetchall()
             pairs: list[tuple[str, list[float]]] = []
             for r in rows:
                 node_id, raw = r[0], r[1]
@@ -57,9 +55,7 @@ def _load_embeddings(conn: sqlite3.Connection) -> list[tuple[str, list[float]]]:
         except Exception:
             pass
 
-    rows = conn.execute(
-        "SELECT node_id, embedding FROM node_embeddings"
-    ).fetchall()
+    rows = conn.execute("SELECT node_id, embedding FROM node_embeddings").fetchall()
     pairs = []
     for r in rows:
         node_id, raw = r[0], r[1]

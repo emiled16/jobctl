@@ -8,7 +8,7 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from rich.console import Console
 from rich.prompt import Confirm
@@ -37,11 +37,17 @@ console = Console()
 ConfirmFn = Callable[[str, str], bool]
 
 
-def _progress(bus: AsyncEventBus | None, step: str, message: str = "") -> None:
+def _progress(
+    bus: AsyncEventBus | None,
+    step: str,
+    message: str = "",
+    *,
+    job_id: str | None = None,
+) -> None:
     if bus is None:
         console.print(f"[dim]{step}:[/dim] {message}")
         return
-    bus.publish(ApplyProgressEvent(step=step, message=message))
+    bus.publish(ApplyProgressEvent(step=step, message=message, job_id=job_id))
 
 
 def _bus_confirm(bus: AsyncEventBus, question: str, payload_kind: str) -> bool:
@@ -49,9 +55,7 @@ def _bus_confirm(bus: AsyncEventBus, question: str, payload_kind: str) -> bool:
     queue = bus.subscribe()
     try:
         bus.publish(
-            ConfirmationRequestedEvent(
-                question=question, confirm_id=confirm_id, kind=payload_kind
-            )
+            ConfirmationRequestedEvent(question=question, confirm_id=confirm_id, kind=payload_kind)
         )
         # Poll the subscriber queue synchronously, letting the loop run.
         while True:
@@ -62,32 +66,22 @@ def _bus_confirm(bus: AsyncEventBus, question: str, payload_kind: str) -> bool:
 
                 time.sleep(0.05)
                 continue
-            if (
-                isinstance(event, ConfirmationAnsweredEvent)
-                and event.confirm_id == confirm_id
-            ):
+            if isinstance(event, ConfirmationAnsweredEvent) and event.confirm_id == confirm_id:
                 return bool(event.answer)
     finally:
         bus.unsubscribe(queue)
 
 
-async def _bus_confirm_async(
-    bus: AsyncEventBus, question: str, payload_kind: str
-) -> bool:
+async def _bus_confirm_async(bus: AsyncEventBus, question: str, payload_kind: str) -> bool:
     confirm_id = uuid.uuid4().hex
     queue = bus.subscribe()
     try:
         bus.publish(
-            ConfirmationRequestedEvent(
-                question=question, confirm_id=confirm_id, kind=payload_kind
-            )
+            ConfirmationRequestedEvent(question=question, confirm_id=confirm_id, kind=payload_kind)
         )
         while True:
             event = await queue.get()
-            if (
-                isinstance(event, ConfirmationAnsweredEvent)
-                and event.confirm_id == confirm_id
-            ):
+            if isinstance(event, ConfirmationAnsweredEvent) and event.confirm_id == confirm_id:
                 return bool(event.answer)
     finally:
         bus.unsubscribe(queue)
@@ -116,6 +110,7 @@ def run_apply(
     *,
     bus: AsyncEventBus | None = None,
     confirm_fn: ConfirmFn | None = None,
+    job_id: str | None = None,
 ) -> str:
     """Run the full JD evaluation and material generation flow.
 
@@ -126,13 +121,13 @@ def run_apply(
     headless ``render --headless`` path working unchanged.
     """
 
-    _progress(bus, "fetch_jd", f"Fetching JD from {url_or_text[:80]}")
+    _progress(bus, "fetch_jd", f"Fetching JD from {url_or_text[:80]}", job_id=job_id)
     jd = fetch_and_parse_jd(url_or_text, llm_client)
 
-    _progress(bus, "retrieve", "Retrieving relevant experience")
+    _progress(bus, "retrieve", "Retrieving relevant experience", job_id=job_id)
     relevant_experience = retrieve_relevant_experience(conn, jd, llm_client)
 
-    _progress(bus, "evaluate", "Evaluating fit")
+    _progress(bus, "evaluate", "Evaluating fit", job_id=job_id)
     evaluation = evaluate_fit(jd, relevant_experience, llm_client)
     if bus is None:
         display_evaluation(jd, evaluation)
@@ -145,19 +140,19 @@ def run_apply(
         jd=jd,
         evaluation=evaluation,
     )
-    _progress(bus, "application_created", f"app_id={app_id}")
+    _progress(bus, "application_created", f"app_id={app_id}", job_id=job_id)
 
     if not _confirm(bus, confirm_fn, "Generate tailored materials?"):
-        _progress(bus, "done", f"Tracker entry created: {app_id}")
+        _progress(bus, "done", f"Tracker entry created: {app_id}", job_id=job_id)
         return app_id
 
     output_dir = _application_output_dir(jd)
-    _progress(bus, "generate_resume", "Generating tailored resume YAML")
+    _progress(bus, "generate_resume", "Generating tailored resume YAML", job_id=job_id)
     resume_yaml_path = _generate_reviewed_resume(
         jd, relevant_experience, evaluation, llm_client, output_dir, bus=bus
     )
 
-    _progress(bus, "render_resume_pdf", str(resume_yaml_path))
+    _progress(bus, "render_resume_pdf", str(resume_yaml_path), job_id=job_id)
     resume_pdf_path = render_pdf(
         resume_yaml_path,
         getattr(config, "default_template", None),
@@ -167,7 +162,7 @@ def run_apply(
     cover_letter_yaml_path: Path | None = None
     cover_letter_pdf_path: Path | None = None
     if _confirm(bus, confirm_fn, "Generate cover letter?"):
-        _progress(bus, "generate_cover_letter", "Generating cover letter YAML")
+        _progress(bus, "generate_cover_letter", "Generating cover letter YAML", job_id=job_id)
         cover_letter_yaml_path = _generate_reviewed_cover_letter(
             jd,
             relevant_experience,
@@ -176,7 +171,7 @@ def run_apply(
             output_dir,
             bus=bus,
         )
-        _progress(bus, "render_cover_letter_pdf", str(cover_letter_yaml_path))
+        _progress(bus, "render_cover_letter_pdf", str(cover_letter_yaml_path), job_id=job_id)
         cover_letter_pdf_path = render_pdf(
             cover_letter_yaml_path,
             "cover-letter.html",
@@ -193,7 +188,7 @@ def run_apply(
     )
     update_status(conn, app_id, "materials_ready")
 
-    _progress(bus, "done", f"Materials ready for {app_id}")
+    _progress(bus, "done", f"Materials ready for {app_id}", job_id=job_id)
     if bus is None:
         console.print(f"Tracker entry created: {app_id}")
         console.print(f"Resume YAML: {resume_yaml_path}")
@@ -234,17 +229,13 @@ def _generate_reviewed_cover_letter(
     bus: AsyncEventBus | None = None,
 ) -> Path:
     while True:
-        cover_letter = generate_cover_letter_yaml(
-            jd, relevant_experience, evaluation, llm_client
-        )
+        cover_letter = generate_cover_letter_yaml(jd, relevant_experience, evaluation, llm_client)
         if bus is not None:
             cover_letter_yaml_path = save_and_review_cover_letter(
                 cover_letter, output_dir, interactive=False
             )
         else:
-            cover_letter_yaml_path = save_and_review_cover_letter(
-                cover_letter, output_dir
-            )
+            cover_letter_yaml_path = save_and_review_cover_letter(cover_letter, output_dir)
         if cover_letter_yaml_path is not None:
             return cover_letter_yaml_path
 

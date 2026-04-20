@@ -118,21 +118,15 @@ class CurateView(Vertical):
         elif event.button.id == "btn-run":
             self.action_run_curation()
 
-    def on_curation_proposal_card_accepted(
-        self, event: CurationProposalCard.Accepted
-    ) -> None:
+    def on_curation_proposal_card_accepted(self, event: CurationProposalCard.Accepted) -> None:
         self.store.accept(event.proposal_id)
         self.query_one("#status", Label).update("Accepted proposal")
 
-    def on_curation_proposal_card_rejected(
-        self, event: CurationProposalCard.Rejected
-    ) -> None:
+    def on_curation_proposal_card_rejected(self, event: CurationProposalCard.Rejected) -> None:
         self.store.reject(event.proposal_id)
         self.query_one("#status", Label).update("Rejected proposal")
 
-    def on_curation_proposal_card_edited(
-        self, event: CurationProposalCard.Edited
-    ) -> None:
+    def on_curation_proposal_card_edited(self, event: CurationProposalCard.Edited) -> None:
         self.store.mark_edited(event.proposal_id, event.payload)
         self.query_one("#status", Label).update("Saved edited proposal")
 

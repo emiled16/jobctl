@@ -1,6 +1,5 @@
 """Shared helpers for Typer command modules."""
 
-from dataclasses import asdict
 from importlib import resources
 from pathlib import Path
 import shutil
@@ -93,13 +92,15 @@ def run_tui(start_screen: str = "chat", initial_message: str | None = None) -> N
         from jobctl.tui.app import JobctlApp
 
         provider = get_provider(config, cwd=project_root)
-        conn = get_connection(project_root / CONFIG_DIR_NAME / "jobctl.db")
+        db_path = project_root / CONFIG_DIR_NAME / "jobctl.db"
+        conn = get_connection(db_path)
         try:
             JobctlApp(
                 conn=conn,
                 project_root=project_root,
                 config=config,
                 provider=provider,
+                db_path=db_path,
                 start_screen=start_screen,
                 initial_message=initial_message,
             ).run()

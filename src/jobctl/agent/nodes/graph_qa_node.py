@@ -41,8 +41,7 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec(
         name="vector_search",
         description=(
-            "Semantic search across node embeddings. Returns the most "
-            "similar nodes to the query."
+            "Semantic search across node embeddings. Returns the most similar nodes to the query."
         ),
         parameters={
             "type": "object",

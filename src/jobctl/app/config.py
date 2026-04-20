@@ -7,7 +7,13 @@ import click
 import typer
 
 from jobctl.app.common import command_error, print_config
-from jobctl.config import ConfigError, find_project_root, load_config, replace_config_value, save_config
+from jobctl.config import (
+    ConfigError,
+    find_project_root,
+    load_config,
+    replace_config_value,
+    save_config,
+)
 
 app = typer.Typer(help="View or update project configuration.", invoke_without_command=True)
 

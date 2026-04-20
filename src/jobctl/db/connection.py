@@ -157,12 +157,9 @@ def _migration_003_create_ingestion_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute("CREATE INDEX idx_ingested_items_job ON ingested_items (job_id)")
     conn.execute(
-        "CREATE INDEX idx_ingested_items_job ON ingested_items (job_id)"
-    )
-    conn.execute(
-        "CREATE UNIQUE INDEX idx_ingested_items_external "
-        "ON ingested_items (job_id, external_id)"
+        "CREATE UNIQUE INDEX idx_ingested_items_external ON ingested_items (job_id, external_id)"
     )
 
 
@@ -181,9 +178,7 @@ def _migration_004_create_node_sources(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute("CREATE INDEX idx_node_sources_node ON node_sources (node_id)")
-    conn.execute(
-        "CREATE INDEX idx_node_sources_type ON node_sources (source_type)"
-    )
+    conn.execute("CREATE INDEX idx_node_sources_type ON node_sources (source_type)")
 
 
 def _migration_005_create_agent_sessions(conn: sqlite3.Connection) -> None:
@@ -212,12 +207,8 @@ def _migration_006_create_curation_proposals(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    conn.execute(
-        "CREATE INDEX idx_curation_proposals_status ON curation_proposals (status)"
-    )
-    conn.execute(
-        "CREATE INDEX idx_curation_proposals_kind ON curation_proposals (kind)"
-    )
+    conn.execute("CREATE INDEX idx_curation_proposals_status ON curation_proposals (status)")
+    conn.execute("CREATE INDEX idx_curation_proposals_kind ON curation_proposals (kind)")
 
 
 def _migration_007_create_embedding_meta(conn: sqlite3.Connection) -> None:

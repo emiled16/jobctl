@@ -42,9 +42,7 @@ def _nodes_by_type(conn: sqlite3.Connection, node_type: str) -> list[dict[str, A
     return [dict(row) for row in rows]
 
 
-def _roles_missing_relation(
-    conn: sqlite3.Connection, relation: str
-) -> list[dict[str, Any]]:
+def _roles_missing_relation(conn: sqlite3.Connection, relation: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT nodes.*

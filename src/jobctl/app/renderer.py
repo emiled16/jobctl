@@ -38,9 +38,7 @@ def render(
     ] = None,
     validate_only: Annotated[
         bool,
-        typer.Option(
-            "--validate-only", help="Validate YAML without rendering a PDF."
-        ),
+        typer.Option("--validate-only", help="Validate YAML without rendering a PDF."),
     ] = False,
     headless: Annotated[
         bool,
@@ -80,9 +78,7 @@ def render(
         if not yaml_paths:
             raise command_error(f"No YAML files found in {path}")
         if output_path is not None and len(yaml_paths) > 1:
-            raise command_error(
-                "--output can only be used with a single YAML file."
-            )
+            raise command_error("--output can only be used with a single YAML file.")
 
         validate_section_names(enable_sections, RESUME_SECTION_DEFAULTS)
         validate_section_names(disable_sections, RESUME_SECTION_DEFAULTS)

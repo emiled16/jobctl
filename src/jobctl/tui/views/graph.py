@@ -171,12 +171,9 @@ class GraphView(Vertical):
 
     def _refresh(self, *, keep_filter: bool = False) -> None:
         summary_rows = self.conn.execute(
-            "SELECT type, COUNT(*) AS count, MAX(updated_at) AS updated_at "
-            "FROM nodes GROUP BY type"
+            "SELECT type, COUNT(*) AS count, MAX(updated_at) AS updated_at FROM nodes GROUP BY type"
         ).fetchall()
-        edge_count = self.conn.execute("SELECT COUNT(*) AS count FROM edges").fetchone()[
-            "count"
-        ]
+        edge_count = self.conn.execute("SELECT COUNT(*) AS count FROM edges").fetchone()["count"]
         total_nodes = sum(row["count"] for row in summary_rows)
         last_updated = max(
             (row["updated_at"] for row in summary_rows if row["updated_at"]), default=""
@@ -218,17 +215,14 @@ class GraphView(Vertical):
             branch = tree.root.add(node_type.title())
             for row in type_rows:
                 child = branch.add_leaf(row["name"], data=row["id"])
-                child.add_leaf(
-                    json.dumps(json.loads(row["properties"] or "{}"), sort_keys=True)
-                )
+                child.add_leaf(json.dumps(json.loads(row["properties"] or "{}"), sort_keys=True))
         tree.root.expand()
 
     def _show_node(self, node_id: str) -> None:
         node = get_node(self.conn, node_id)
         edges = [*get_edges_from(self.conn, node_id), *get_edges_to(self.conn, node_id)]
         connected = "\n".join(
-            f"- {edge['relation']}: "
-            f"{edge.get('target', edge.get('source', {})).get('name', '')}"
+            f"- {edge['relation']}: {edge.get('target', edge.get('source', {})).get('name', '')}"
             for edge in edges
         )
         sources = self._node_sources(node_id)

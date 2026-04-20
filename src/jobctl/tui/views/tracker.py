@@ -127,9 +127,7 @@ class TrackerView(Vertical):
     def on_mount(self) -> None:
         table = self.query_one("#tracker-table", DataTable)
         table.cursor_type = "row"
-        table.add_columns(
-            "Company", "Role", "Status", "Score", "Date", "Location", "Follow-up"
-        )
+        table.add_columns("Company", "Role", "Status", "Score", "Date", "Location", "Follow-up")
         self._populate_table()
 
     def on_select_changed(self, event: Select.Changed) -> None:
@@ -156,7 +154,9 @@ class TrackerView(Vertical):
             return
         application = get_application(self.conn, self.current_app_id)
         current_index = (
-            STATUS_CYCLE.index(application["status"]) if application["status"] in STATUS_CYCLE else 0
+            STATUS_CYCLE.index(application["status"])
+            if application["status"] in STATUS_CYCLE
+            else 0
         )
         new_status = STATUS_CYCLE[(current_index + 1) % len(STATUS_CYCLE)]
         update_application(self.conn, self.current_app_id, status=new_status)
@@ -254,8 +254,7 @@ class TrackerView(Vertical):
     def _show_application(self, app_id: str) -> None:
         application = get_application(self.conn, app_id)
         events = "\n".join(
-            f"- {event['created_at'][:19]} {event['event_type']}: "
-            f"{event['description'] or ''}"
+            f"- {event['created_at'][:19]} {event['event_type']}: {event['description'] or ''}"
             for event in application["events"]
         )
         detail = (

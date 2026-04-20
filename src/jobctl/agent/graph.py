@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -32,6 +33,7 @@ def build_graph(
     runner: BackgroundJobRunner | None = None,
     proposal_store: CurationProposalStore | None = None,
     config: JobctlConfig | None = None,
+    db_path: Path | None = None,
 ) -> Any:
     """Return a compiled LangGraph graph bound to the given dependencies."""
 
@@ -55,6 +57,7 @@ def build_graph(
             store=store,
             runner=runner,
             bus=bus,
+            db_path=db_path,
         )
 
     graph: StateGraph[AgentState] = StateGraph(AgentState)
@@ -86,6 +89,7 @@ def build_graph(
             store=store,
             runner=runner,
             bus=bus,
+            db_path=db_path,
         )
 
     graph.add_node("apply_node", _apply)

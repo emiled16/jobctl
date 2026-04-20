@@ -39,9 +39,7 @@ def _build_openai() -> LLMProvider | None:
     return OpenAIProvider(
         api_key=os.environ.get("OPENAI_API_KEY", ""),
         chat_model=os.environ.get("TEST_OPENAI_CHAT_MODEL", "gpt-4o-mini"),
-        embedding_model=os.environ.get(
-            "TEST_OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"
-        ),
+        embedding_model=os.environ.get("TEST_OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
     )
 
 
@@ -107,7 +105,7 @@ def test_chat_structured_returns_model(provider: LLMProvider) -> None:
     if not hasattr(provider, "chat_structured"):
         pytest.skip("provider does not implement chat_structured")
     messages = [
-        {"role": "system", "content": "Return {\"greeting\": \"hello\"}."},
+        {"role": "system", "content": 'Return {"greeting": "hello"}.'},
         {"role": "user", "content": "Greet me."},
     ]
     if isinstance(provider, FakeLLMProvider):

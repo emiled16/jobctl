@@ -158,9 +158,9 @@ class ApplyView(Vertical):
     def _refresh_applications(self) -> None:
         self._applications = _load_applications(self.conn)
         select = self.query_one("#apply-select", Select)
-        options = [
-            (f"{a.company} — {a.role}", a.id) for a in self._applications
-        ] or [("(no applications)", "")]
+        options = [(f"{a.company} — {a.role}", a.id) for a in self._applications] or [
+            ("(no applications)", "")
+        ]
         select.set_options(options)
         if self._applications:
             select.value = self._applications[0].id
@@ -218,9 +218,7 @@ class ApplyView(Vertical):
     def _current_row(self) -> ApplicationRow | None:
         if self.current_app_id is None:
             return None
-        return next(
-            (a for a in self._applications if a.id == self.current_app_id), None
-        )
+        return next((a for a in self._applications if a.id == self.current_app_id), None)
 
     def action_save_yaml(self) -> None:
         row = self._current_row()
@@ -265,18 +263,12 @@ class ApplyView(Vertical):
                 # Older Textual versions: fall back to running in executor.
                 import asyncio
 
-                pdf_path = await asyncio.get_event_loop().run_in_executor(
-                    None, _render
-                )
+                pdf_path = await asyncio.get_event_loop().run_in_executor(None, _render)
             except Exception as exc:  # noqa: BLE001
                 self._set_status(f"Render failed: {exc}")
                 return
             self._set_status(f"Rendered {pdf_path}")
-            self.bus.publish(
-                ApplyProgressEvent(
-                    step="render_pdf", message="done", job_id=row.id
-                )
-            )
+            self.bus.publish(ApplyProgressEvent(step="render_pdf", message="done", job_id=row.id))
 
         self.run_worker(_do_render(), exclusive=False)
 
@@ -308,9 +300,7 @@ class ApplyView(Vertical):
             return
         self._set_status("Cover-letter generation queued.")
         self.bus.publish(
-            ApplyProgressEvent(
-                step="generate_cover", message="queued", job_id=self.current_app_id
-            )
+            ApplyProgressEvent(step="generate_cover", message="queued", job_id=self.current_app_id)
         )
 
     def _set_status(self, message: str) -> None:

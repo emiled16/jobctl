@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from jobctl.agent.state import AgentState
@@ -12,6 +13,7 @@ from jobctl.config import JobctlConfig
 from jobctl.core.events import AgentDoneEvent, AsyncEventBus
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
+from jobctl.db.connection import get_connection
 from jobctl.llm.base import LLMProvider, Message
 
 logger = logging.getLogger(__name__)
@@ -89,6 +91,7 @@ def start_apply(
     runner: BackgroundJobRunner,
     config: JobctlConfig,
     url_or_text: str,
+    db_path: Path | None = None,
 ) -> str:
     """Run ``run_apply`` in the background. Returns the job id."""
     job_id = store.create_job(
@@ -100,11 +103,19 @@ def start_apply(
     def _do_apply() -> dict[str, Any]:
         from jobctl.jobs.apply_pipeline import run_apply
 
-        shim = _build_shim(provider)
-        app_id = run_apply(conn, url_or_text, shim, config, bus=bus)
-        return {"app_id": app_id}
+        worker_conn = conn
+        if db_path is not None:
+            worker_conn = get_connection(db_path)
 
-    runner.submit(job_id, _do_apply)
+        try:
+            shim = _build_shim(provider)
+            app_id = run_apply(worker_conn, url_or_text, shim, config, bus=bus, job_id=job_id)
+            return {"app_id": app_id}
+        finally:
+            if db_path is not None:
+                worker_conn.close()
+
+    runner.submit(job_id, _do_apply, source="apply")
     return job_id
 
 
@@ -117,6 +128,7 @@ def apply_node(
     store: BackgroundJobStore,
     runner: BackgroundJobRunner,
     bus: AsyncEventBus,
+    db_path: Path | None = None,
 ) -> AgentState:
     """Launch a background apply flow based on the user's request."""
 
@@ -137,6 +149,7 @@ def apply_node(
             runner=runner,
             config=config,
             url_or_text=url_or_text,
+            db_path=db_path,
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("apply_node failed to start background job")
