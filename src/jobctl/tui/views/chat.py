@@ -11,6 +11,7 @@ keeps the view usable in the TUI.
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -263,6 +264,22 @@ class ChatView(Vertical):
             asyncio.create_task(runner.submit_mode_change(rest))
             log.write(Markdown(f"_confirm mode change to **{rest}**_"))
             return True
+        if command == "apply":
+            if not rest:
+                self._open_apply_input()
+                return True
+            runner = self._resolve_runner()
+            if runner is None or not hasattr(runner, "submit_workflow"):
+                log = self.query_one("#chat-log", RichLog)
+                log.write(Markdown("_apply requires an agent runner_"))
+                return True
+            from jobctl.agent.state import make_workflow_request
+
+            request = make_workflow_request("apply", {"url_or_text": rest})
+            asyncio.create_task(runner.submit_workflow(request))
+            log = self.query_one("#chat-log", RichLog)
+            log.write(Markdown("_started apply workflow_"))
+            return True
         if command in {"chat", "graph", "tracker", "apply", "curate", "settings"}:
             show_view = getattr(self.app, "show_view", None)
             if show_view is None:
@@ -322,6 +339,15 @@ class ChatView(Vertical):
             return
 
         log.write(Markdown(f"_unknown /report target `{kind}`; try `coverage` or `summary`._"))
+
+    def _open_apply_input(self) -> None:
+        self._render_event(
+            ConfirmationRequestedEvent(
+                question="Paste a job URL or job description.",
+                confirm_id=uuid.uuid4().hex,
+                kind="apply_input",
+            )
+        )
 
     def _current_agent_mode(self) -> str:
         app = self.app
@@ -394,6 +420,10 @@ class ChatView(Vertical):
                 from jobctl.tui.widgets.github_ingest_input import GitHubIngestInput
 
                 widget = GitHubIngestInput(event, bus=self.bus)
+            elif event.kind == "apply_input":
+                from jobctl.tui.widgets.apply_input import ApplyInput
+
+                widget = ApplyInput(event, bus=self.bus)
             else:
                 from jobctl.tui.widgets.confirm_card import InlineConfirmCard
 

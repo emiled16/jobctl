@@ -17,7 +17,7 @@ Reference plan: `plans/plan_v3.0.md`
 - [x] T8: Make `/mode` update persisted `AgentState.mode` through confirmation
 - [x] T9: Add file selection validation before starting resume ingestion
 - [x] T10: Implement inline GitHub ingest input flow
-- [ ] T11: Implement inline Apply input flow for Chat and palette starts
+- [x] T11: Implement inline Apply input flow for Chat and palette starts
 - [ ] T12: Wire proactive resume and GitHub prompts into real workflow starts
 - [ ] T13: Convert palette workflow commands from raw slash text into structured UI actions
 - [ ] T14: Add tests for proactive ingest prompts, Apply starts, mode changes, and palette workflow starts

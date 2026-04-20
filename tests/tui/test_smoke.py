@@ -124,7 +124,7 @@ async def test_slash_navigation_uses_content_switcher(tmp_path: Path) -> None:
         switcher = app.query_one("#main-switcher", ContentSwitcher)
         chat = app.query_one(ChatView)
 
-        for name in ("graph", "tracker", "apply", "curate", "settings"):
+        for name in ("graph", "tracker", "curate", "settings"):
             chat._handle_submission(f"/{name}")
             await pilot.pause()
             assert switcher.current == name
