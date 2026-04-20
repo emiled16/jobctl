@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 
 from jobctl.agent.router import route
-from jobctl.agent.state import AgentState, Confirmation, new_state
+from jobctl.agent.state import (
+    AgentState,
+    Confirmation,
+    WorkflowKind,
+    make_workflow_request,
+    new_state,
+    store_workflow_request,
+)
 
 
 def _state_with_messages(*messages, **overrides) -> AgentState:
@@ -73,3 +80,24 @@ def test_pending_confirmation_beats_slash_command() -> None:
     )
 
     assert route(state) == "wait_for_confirmation"
+
+
+@pytest.mark.parametrize(
+    "kind,expected",
+    [
+        ("resume_ingest", "ingest_node"),
+        ("github_ingest", "ingest_node"),
+        ("apply", "apply_node"),
+    ],
+)
+def test_workflow_requests_route_without_slash_text(
+    kind: WorkflowKind,
+    expected: str,
+) -> None:
+    state = _state_with_messages(("user", "start the workflow"))
+    store_workflow_request(
+        state,
+        make_workflow_request(kind, {"url_or_text": "https://example.com/job"}),
+    )
+
+    assert route(state) == expected

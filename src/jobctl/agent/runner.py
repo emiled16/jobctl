@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from jobctl.agent.session import load_session, save_session
-from jobctl.agent.state import AgentState, new_state
+from jobctl.agent.state import (
+    AgentState,
+    WorkflowRequest,
+    new_state,
+    store_workflow_request,
+)
 from jobctl.core.events import AgentDoneEvent, AsyncEventBus
 from jobctl.llm.base import LLMProvider, Message
 
@@ -88,6 +93,27 @@ class LangGraphRunner:
             logger.exception("failed to persist agent session")
         return state
 
+    async def submit_workflow(self, request: WorkflowRequest) -> AgentState:
+        """Run the graph from a structured workflow-start request."""
+        state = self._load_state()
+        store_workflow_request(state, request)
+
+        graph = self._ensure_graph()
+        try:
+            result = await graph.ainvoke(state)
+        except Exception:
+            logger.exception("LangGraph workflow invocation failed")
+            raise
+
+        if isinstance(result, dict):
+            state = result  # type: ignore[assignment]
+
+        try:
+            save_session(self.conn, state)
+        except Exception:
+            logger.exception("failed to persist agent session")
+        return state
+
     def submit_background(
         self,
         user_message: str,
@@ -97,6 +123,16 @@ class LangGraphRunner:
         """Schedule :meth:`submit` on ``loop`` (default: running loop)."""
         target_loop = loop or asyncio.get_event_loop()
         return asyncio.run_coroutine_threadsafe(self.submit(user_message), target_loop)  # type: ignore[return-value]
+
+    def submit_workflow_background(
+        self,
+        request: WorkflowRequest,
+        *,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> asyncio.Future[AgentState]:
+        """Schedule :meth:`submit_workflow` on ``loop`` (default: running loop)."""
+        target_loop = loop or asyncio.get_event_loop()
+        return asyncio.run_coroutine_threadsafe(self.submit_workflow(request), target_loop)  # type: ignore[return-value]
 
 
 __all__ = ["LangGraphRunner"]

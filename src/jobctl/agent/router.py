@@ -8,7 +8,7 @@ tests without any network access.
 
 from __future__ import annotations
 
-from jobctl.agent.state import AgentState
+from jobctl.agent.state import AgentState, workflow_request_from_state
 
 
 _SLASH_TO_NODE = {
@@ -30,6 +30,13 @@ def route(state: AgentState) -> str:
     """Return the name of the next node LangGraph should execute."""
     if state.get("pending_confirmation"):
         return "wait_for_confirmation"
+
+    workflow_request = workflow_request_from_state(state)
+    if workflow_request is not None:
+        if workflow_request["kind"] in ("resume_ingest", "github_ingest"):
+            return "ingest_node"
+        if workflow_request["kind"] == "apply":
+            return "apply_node"
 
     last_user = _last_user_message(state).strip()
     lowered = last_user.lower()

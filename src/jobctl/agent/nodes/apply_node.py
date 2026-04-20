@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from jobctl.agent.state import AgentState
+from jobctl.agent.state import AgentState, workflow_request_from_state
 from jobctl.config import JobctlConfig
 from jobctl.core.events import AgentDoneEvent, AsyncEventBus
 from jobctl.core.jobs.runner import BackgroundJobRunner
@@ -38,6 +38,16 @@ def _last_user(state: AgentState) -> str:
 
 
 def _extract_url_or_text(state: AgentState) -> str | None:
+    workflow_request = workflow_request_from_state(state)
+    if workflow_request is not None and workflow_request["kind"] == "apply":
+        request_payload = workflow_request["payload"]
+        value = (
+            request_payload.get("url_or_text")
+            or request_payload.get("jd_url")
+            or request_payload.get("jd_text")
+        )
+        return str(value) if value else None
+
     payload = state.get("last_tool_result") or {}
     if payload.get("url_or_text"):
         return str(payload["url_or_text"])
