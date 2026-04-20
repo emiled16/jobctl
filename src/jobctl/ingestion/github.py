@@ -1,6 +1,9 @@
 """GitHub repository ingestion."""
 
+from __future__ import annotations
+
 import base64
+import logging
 import sqlite3
 from urllib.parse import urlparse
 
@@ -8,8 +11,17 @@ import httpx
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
+from jobctl.core.events import (
+    AsyncEventBus,
+    IngestDoneEvent,
+    IngestErrorEvent,
+    IngestProgressEvent,
+)
+from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.ingestion.resume import persist_facts
 from jobctl.llm.schemas import ExtractedProfile
+
+logger = logging.getLogger(__name__)
 
 
 GITHUB_API_BASE_URL = "https://api.github.com"
@@ -137,14 +149,97 @@ def ingest_github(
     llm_client,
     interactive: bool = True,
     fetcher: GitHubFetcher | None = None,
+    *,
+    bus: AsyncEventBus | None = None,
+    store: BackgroundJobStore | None = None,
+    job_id: str | None = None,
+    preselected_repos: list[tuple[str, str]] | None = None,
 ) -> int:
+    """Ingest GitHub repositories, optionally with event-bus progress reporting.
+
+    When ``bus`` / ``store`` / ``job_id`` are provided:
+
+    * Already-ingested repos (by ``owner/name`` + ``updated_at``) are skipped.
+    * Progress events are published per-repo.
+    * Rich prompts are bypassed; the caller is expected to pass an explicit
+      ``preselected_repos`` list assembled from :class:`MultiSelectList`.
+    """
     fetcher = fetcher or GitHubFetcher()
-    repos = _resolve_repositories(username_or_urls, fetcher, interactive)
+    if preselected_repos is not None:
+        repos = list(preselected_repos)
+    else:
+        repos = _resolve_repositories(username_or_urls, fetcher, interactive)
+
     persisted_count = 0
-    for owner, repo in repos:
-        repo_detail = fetcher.get_repo_detail(owner, repo)
-        profile = extract_facts_from_repo(repo_detail, llm_client)
-        persisted_count += persist_facts(conn, profile.facts, llm_client, interactive=interactive)
+    total = len(repos)
+    for index, (owner, repo) in enumerate(repos, start=1):
+        external_id = f"{owner}/{repo}"
+        try:
+            repo_detail = fetcher.get_repo_detail(owner, repo)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("github fetch failed for %s", external_id)
+            if bus is not None:
+                bus.publish(
+                    IngestErrorEvent(source="github", error=str(exc), job_id=job_id)
+                )
+            continue
+
+        updated_at = repo_detail.get("updated_at")
+        if store is not None and job_id is not None and store.is_item_seen(
+            job_id, external_id=external_id, external_updated_at=updated_at
+        ):
+            if bus is not None:
+                bus.publish(
+                    IngestProgressEvent(
+                        source="github",
+                        current=index,
+                        total=total,
+                        message=f"{external_id} (skipped)",
+                        job_id=job_id,
+                    )
+                )
+            continue
+
+        try:
+            profile = extract_facts_from_repo(repo_detail, llm_client)
+            persisted_count += persist_facts(
+                conn,
+                profile.facts,
+                llm_client,
+                interactive=interactive and bus is None,
+                bus=bus,
+                store=store,
+                job_id=job_id,
+            )
+            if store is not None and job_id is not None:
+                store.mark_item_done(
+                    job_id,
+                    external_id=external_id,
+                    external_updated_at=updated_at,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("github persist failed for %s", external_id)
+            if bus is not None:
+                bus.publish(
+                    IngestErrorEvent(source="github", error=str(exc), job_id=job_id)
+                )
+            continue
+
+        if bus is not None:
+            bus.publish(
+                IngestProgressEvent(
+                    source="github",
+                    current=index,
+                    total=total,
+                    message=external_id,
+                    job_id=job_id,
+                )
+            )
+
+    if bus is not None:
+        bus.publish(
+            IngestDoneEvent(source="github", facts_added=persisted_count, job_id=job_id)
+        )
     return persisted_count
 
 
