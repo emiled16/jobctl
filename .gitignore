@@ -23,3 +23,5 @@ build/
 # jobctl project data
 .jobctl/
 
+artifacts/
+examples/
