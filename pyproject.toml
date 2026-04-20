@@ -33,6 +33,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest==8.3.5",
+    "pytest-asyncio==0.24.0",
     "ruff==0.11.6",
 ]
 
@@ -45,6 +46,7 @@ packages = ["src/jobctl"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
