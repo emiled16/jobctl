@@ -92,9 +92,7 @@ async def test_chat_renders_partial_stream_before_final_message(tmp_path: Path) 
         chat._handle_submission("stream a reply")
 
         await _wait_until(
-            lambda: bool(
-                chat.query_one("#streaming-assistant-message", StreamingMessage).content
-            )
+            lambda: bool(chat.query_one("#streaming-assistant-message", StreamingMessage).content)
         )
         live = chat.query_one("#streaming-assistant-message", StreamingMessage)
         assert "alpha" in live.content

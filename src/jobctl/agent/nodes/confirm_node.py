@@ -74,7 +74,9 @@ async def wait_for_confirmation_node(
 
     state["pending_confirmation"] = None
     if answer.answer:
-        mode = answer.payload.get("mode") if answer.payload else pending.get("payload", {}).get("mode")
+        mode = (
+            answer.payload.get("mode") if answer.payload else pending.get("payload", {}).get("mode")
+        )
         if mode:
             state["mode"] = mode  # type: ignore[typeddict-item]
     return state

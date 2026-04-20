@@ -9,6 +9,7 @@ import yaml
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
 from textual.widgets import Input, Label, Select, Static, TextArea, Tree
 
 from jobctl.db.graph import (
@@ -22,6 +23,32 @@ from jobctl.db.graph import (
 from jobctl.db.vectors import embed_node
 from jobctl.llm.adapter import as_embedding_client
 from jobctl.llm.base import LLMProvider
+
+
+class DeleteNodeConfirmScreen(ModalScreen[bool]):
+    BINDINGS = [
+        Binding("y", "confirm", "Delete"),
+        Binding("n", "cancel", "Cancel"),
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self, message: str) -> None:
+        super().__init__()
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("Confirm delete"),
+            Static(self.message),
+            Label("Press y to delete, n to cancel."),
+            id="graph-delete-confirm",
+        )
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
 
 
 class GraphView(Vertical):
@@ -116,9 +143,11 @@ class GraphView(Vertical):
             self._show_node(self.current_node_id)
 
     def action_edit_selected(self) -> None:
-        if self.current_node_id is None:
+        node_id = self._selected_node_id()
+        if node_id is None:
             return
-        node = get_node(self.conn, self.current_node_id)
+        self.current_node_id = node_id
+        node = get_node(self.conn, node_id)
         editor = self.query_one("#graph-editor", TextArea)
         editor.text = yaml.safe_dump(
             {
@@ -155,9 +184,35 @@ class GraphView(Vertical):
         self._show_node(self.current_node_id)
 
     def action_delete_selected(self) -> None:
-        if self.current_node_id is None:
+        node_id = self._selected_node_id()
+        if node_id is None:
             return
-        delete_node(self.conn, self.current_node_id)
+        node = get_node(self.conn, node_id)
+        relationship_count = len(get_edges_from(self.conn, node_id)) + len(
+            get_edges_to(self.conn, node_id)
+        )
+
+        def _handle(result: bool | None) -> None:
+            if result:
+                self._delete_node_confirmed(node_id)
+            else:
+                self.current_node_id = node_id
+                self.query_one("#graph-detail", Static).update("Delete canceled.")
+
+        self.app.push_screen(
+            DeleteNodeConfirmScreen(
+                f"Delete {node['type']} node '{node['name']}' with "
+                f"{relationship_count} relationship(s)?"
+            ),
+            _handle,
+        )
+
+    def _delete_node_confirmed(self, node_id: str) -> None:
+        try:
+            delete_node(self.conn, node_id)
+        except Exception as exc:  # noqa: BLE001
+            self.query_one("#graph-detail", Static).update(f"Delete failed: {exc}")
+            return
         self.current_node_id = None
         self._refresh(keep_filter=True)
         self.query_one("#graph-detail", Static).update("Node deleted.")
@@ -213,6 +268,7 @@ class GraphView(Vertical):
 
         for node_type, type_rows in groups.items():
             branch = tree.root.add(node_type.title())
+            branch.expand()
             for row in type_rows:
                 child = branch.add_leaf(row["name"], data=row["id"])
                 child.add_leaf(json.dumps(json.loads(row["properties"] or "{}"), sort_keys=True))
@@ -249,6 +305,14 @@ class GraphView(Vertical):
         detail_lines.append("Connected:")
         detail_lines.append(connected or "(none)")
         self.query_one("#graph-detail", Static).update("\n".join(detail_lines))
+
+    def _selected_node_id(self) -> str | None:
+        if self.current_node_id is not None:
+            return self.current_node_id
+        tree = self.query_one("#graph-tree", Tree)
+        if tree.cursor_node and tree.cursor_node.data:
+            return str(tree.cursor_node.data)
+        return None
 
     def _node_sources(self, node_id: str) -> list[sqlite3.Row]:
         try:

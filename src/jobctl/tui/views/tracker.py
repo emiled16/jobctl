@@ -92,6 +92,7 @@ class TrackerView(Vertical):
         Binding("s", "status_next", "Status"),
         Binding("a", "new_application", "New"),
         Binding("o", "open_pdf", "Open PDF"),
+        Binding("ctrl+s", "save_notes", "Save notes", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -120,6 +121,7 @@ class TrackerView(Vertical):
                 Vertical(
                     Static("Select an application and press Enter.", id="tracker-detail"),
                     TextArea(id="tracker-notes"),
+                    Static("", id="tracker-save-status"),
                 ),
             ),
         )
@@ -148,6 +150,9 @@ class TrackerView(Vertical):
 
     def action_focus_notes(self) -> None:
         self.query_one("#tracker-notes", TextArea).focus()
+
+    def action_save_notes(self) -> None:
+        self._save_notes()
 
     def action_status_next(self) -> None:
         if self.current_app_id is None:
@@ -228,7 +233,19 @@ class TrackerView(Vertical):
             and sender.id == "tracker-notes"
             and self.current_app_id is not None
         ):
+            self._save_notes()
+
+    def _save_notes(self) -> None:
+        if self.current_app_id is None:
+            return
+        sender = self.query_one("#tracker-notes", TextArea)
+        status = self.query_one("#tracker-save-status", Static)
+        try:
             update_application(self.conn, self.current_app_id, notes=sender.text)
+        except Exception as exc:  # noqa: BLE001
+            status.update(f"Save failed: {exc}")
+            return
+        status.update("Notes saved")
 
     def _populate_table(self) -> None:
         table = self.query_one("#tracker-table", DataTable)
@@ -269,6 +286,7 @@ class TrackerView(Vertical):
         )
         self.query_one("#tracker-detail", Static).update(detail)
         self.query_one("#tracker-notes", TextArea).text = application["notes"] or ""
+        self.query_one("#tracker-save-status", Static).update("")
 
 
 def _status_text(status: str) -> Text:

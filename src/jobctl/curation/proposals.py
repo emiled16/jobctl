@@ -96,15 +96,14 @@ class CurationProposalStore:
         self._set_status(proposal_id, "rejected")
 
     def mark_edited(self, proposal_id: str, edited_payload: dict[str, Any]) -> None:
-        now = _utcnow()
         with self._conn:
             self._conn.execute(
                 """
                 UPDATE curation_proposals
-                SET payload_json = ?, status = 'edited', decided_at = ?
+                SET payload_json = ?, status = 'pending', decided_at = NULL
                 WHERE id = ?
                 """,
-                (json.dumps(edited_payload), now, proposal_id),
+                (json.dumps(edited_payload), proposal_id),
             )
 
     def _set_status(self, proposal_id: str, status: ProposalStatus) -> None:

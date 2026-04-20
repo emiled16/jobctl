@@ -83,18 +83,16 @@ async def test_github_ingest_input_submits_structured_workflow(tmp_path: Path) -
         await pilot.pause()
 
         widget = app.query_one(GitHubIngestInput)
-        widget.query_one("#github-ingest-input", Input).value = (
-            "octocat https://github.com/example/repo"
-        )
+        widget.query_one(
+            "#github-ingest-input", Input
+        ).value = "octocat https://github.com/example/repo"
         widget._submit()
         await pilot.pause()
 
         assert runner.requests == [
             {
                 "kind": "github_ingest",
-                "payload": {
-                    "username_or_urls": ["octocat", "https://github.com/example/repo"]
-                },
+                "payload": {"username_or_urls": ["octocat", "https://github.com/example/repo"]},
             }
         ]
         with pytest.raises(NoMatches):

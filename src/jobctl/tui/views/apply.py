@@ -23,7 +23,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, ProgressBar, Select, Static, TextArea
 
-from jobctl.core.events import ApplyProgressEvent, AsyncEventBus
+from jobctl.core.events import ApplyProgressEvent, AsyncEventBus, JobLifecycleEvent
 from jobctl.llm.base import LLMProvider
 
 
@@ -37,6 +37,7 @@ class ApplicationRow:
     resume_yaml_path: str | None
     resume_pdf_path: str | None
     cover_letter_yaml_path: str | None
+    cover_letter_pdf_path: str | None
     jd_raw: str | None
     jd_structured: dict[str, Any] | None
     evaluation_structured: dict[str, Any] | None
@@ -46,7 +47,7 @@ def _load_applications(conn: sqlite3.Connection) -> list[ApplicationRow]:
     rows = conn.execute(
         """
         SELECT id, company, role, fit_score, location, resume_yaml_path,
-               resume_pdf_path, cover_letter_yaml_path, jd_raw, jd_structured,
+               resume_pdf_path, cover_letter_yaml_path, cover_letter_pdf_path, jd_raw, jd_structured,
                evaluation_structured
         FROM applications
         ORDER BY updated_at DESC
@@ -64,6 +65,7 @@ def _load_applications(conn: sqlite3.Connection) -> list[ApplicationRow]:
                 resume_yaml_path=row["resume_yaml_path"],
                 resume_pdf_path=row["resume_pdf_path"],
                 cover_letter_yaml_path=row["cover_letter_yaml_path"],
+                cover_letter_pdf_path=row["cover_letter_pdf_path"],
                 jd_raw=row["jd_raw"],
                 jd_structured=_maybe_json(row["jd_structured"]),
                 evaluation_structured=_maybe_json(row["evaluation_structured"]),
@@ -154,8 +156,15 @@ class ApplyView(Vertical):
                 bar.display = True
                 # Advance a little on each progress event.
                 bar.progress = min(100, (bar.progress or 0) + 15)
+                if event.step == "done":
+                    self._refresh_applications(preserve_current=False)
+            elif isinstance(event, JobLifecycleEvent) and event.kind == "apply":
+                self._set_status(f"{event.phase}: {event.message or event.label}")
+                if event.phase == "done":
+                    self._refresh_applications(preserve_current=False)
 
-    def _refresh_applications(self) -> None:
+    def _refresh_applications(self, *, preserve_current: bool = True) -> None:
+        previous = self.current_app_id
         self._applications = _load_applications(self.conn)
         select = self.query_one("#apply-select", Select)
         options = [(f"{a.company} — {a.role}", a.id) for a in self._applications] or [
@@ -163,8 +172,11 @@ class ApplyView(Vertical):
         ]
         select.set_options(options)
         if self._applications:
-            select.value = self._applications[0].id
-            self._load_current(self._applications[0].id)
+            target = previous if preserve_current and previous else self._applications[0].id
+            if not any(app.id == target for app in self._applications):
+                target = self._applications[0].id
+            select.value = target
+            self._load_current(str(target))
         else:
             self._load_current(None)
 
@@ -212,7 +224,7 @@ class ApplyView(Vertical):
             self.action_refresh()
 
     def action_refresh(self) -> None:
-        self._refresh_applications()
+        self._refresh_applications(preserve_current=True)
         self._set_status("Applications refreshed.")
 
     def _current_row(self) -> ApplicationRow | None:
@@ -267,6 +279,13 @@ class ApplyView(Vertical):
             except Exception as exc:  # noqa: BLE001
                 self._set_status(f"Render failed: {exc}")
                 return
+            from jobctl.jobs.tracker import update_application
+
+            update_application(self.conn, row.id, resume_pdf_path=pdf_path)
+            current = self.current_app_id
+            self._refresh_applications(preserve_current=True)
+            if current is not None:
+                self._load_current(current)
             self._set_status(f"Rendered {pdf_path}")
             self.bus.publish(ApplyProgressEvent(step="render_pdf", message="done", job_id=row.id))
 
@@ -296,15 +315,97 @@ class ApplyView(Vertical):
             self._set_status(f"Open failed: {exc}")
 
     def action_generate_cover(self) -> None:
-        if self.current_app_id is None:
+        row = self._current_row()
+        if row is None:
             return
-        self._set_status("Cover-letter generation queued.")
-        self.bus.publish(
-            ApplyProgressEvent(step="generate_cover", message="queued", job_id=self.current_app_id)
-        )
+        missing = self._cover_letter_missing_prerequisites(row)
+        if missing:
+            self._set_status(f"Cover letter unavailable: {missing}")
+            return
+        self._set_status("Generating cover letter.")
+        self.bus.publish(ApplyProgressEvent(step="generate_cover", message="queued", job_id=row.id))
+
+        def _generate() -> tuple[str, str]:
+            from jobctl.generation.cover_letter import (
+                generate_cover_letter_yaml,
+                save_and_review_cover_letter,
+            )
+            from jobctl.generation.renderer import output_pdf_path, render_pdf
+            from jobctl.llm.schemas import ExtractedJD, FitEvaluation
+
+            jd = ExtractedJD.model_validate(row.jd_structured)
+            evaluation = FitEvaluation.model_validate(row.evaluation_structured)
+            output_dir = _material_output_dir(row)
+            cover = generate_cover_letter_yaml(jd, {}, evaluation, _ProviderShim(self.provider))
+            yaml_path = save_and_review_cover_letter(cover, output_dir, interactive=False)
+            if yaml_path is None:
+                raise RuntimeError("cover-letter generation did not produce YAML")
+            pdf_path = render_pdf(yaml_path, "cover-letter.html", output_pdf_path(yaml_path))
+            return str(yaml_path), str(pdf_path)
+
+        async def _do_generate() -> None:
+            try:
+                yaml_path, pdf_path = await self.app.run_in_thread(_generate)  # type: ignore[attr-defined]
+            except AttributeError:
+                import asyncio
+
+                yaml_path, pdf_path = await asyncio.get_event_loop().run_in_executor(
+                    None, _generate
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._set_status(f"Cover letter failed: {exc}")
+                self.bus.publish(
+                    ApplyProgressEvent(step="generate_cover", message="error", job_id=row.id)
+                )
+                return
+            from jobctl.jobs.tracker import update_application
+
+            update_application(
+                self.conn,
+                row.id,
+                cover_letter_yaml_path=yaml_path,
+                cover_letter_pdf_path=pdf_path,
+            )
+            self._refresh_applications(preserve_current=True)
+            self._load_current(row.id)
+            self._set_status(f"Generated cover letter: {pdf_path}")
+            self.bus.publish(
+                ApplyProgressEvent(
+                    step="generate_cover",
+                    message=f"done: {yaml_path}",
+                    job_id=row.id,
+                )
+            )
+
+        self.run_worker(_do_generate(), exclusive=False)
 
     def _set_status(self, message: str) -> None:
         self.query_one("#apply-status", Static).update(message)
+
+    def _cover_letter_missing_prerequisites(self, row: ApplicationRow) -> str | None:
+        if not row.jd_structured:
+            return "missing structured JD"
+        if not row.evaluation_structured:
+            return "missing fit evaluation"
+        return None
+
+
+class _ProviderShim:
+    def __init__(self, provider: LLMProvider) -> None:
+        self.provider = provider
+
+    def chat_structured(self, messages, response_format):
+        payload = self.provider.chat(messages).get("content") or "{}"
+        return response_format.model_validate_json(payload)
+
+
+def _material_output_dir(row: ApplicationRow) -> Path:
+    if row.resume_yaml_path:
+        path = Path(row.resume_yaml_path)
+        if len(path.parents) >= 3 and path.parent.name == "drafts":
+            return path.parents[2]
+        return path.parent
+    return Path.cwd() / ".jobctl" / "exports" / f"{row.company}-{row.role}"
 
 
 def _format_evaluation(evaluation: dict[str, Any] | None) -> str:
