@@ -14,7 +14,7 @@ Reference plan: `docs/plan-v2.md`
 - [x] T6: Refactor `JobctlConfig` to support a nested `llm` provider block
 - [x] T7: Implement `AsyncEventBus` with typed event dataclasses in `src/jobctl/core/events.py`
 - [ ] T8: Implement `BackgroundJobRunner` in `src/jobctl/core/jobs/runner.py`
-- [ ] T9: Implement `BackgroundJobStore` CRUD in `src/jobctl/core/jobs/store.py`
+- [x] T9: Implement `BackgroundJobStore` CRUD in `src/jobctl/core/jobs/store.py`
 - [x] T10: Add DB migrations 003–007 for new tables
 - [ ] T11: Write `LLMProvider` conformance test suite in `tests/llm/test_provider_conformance.py`
 
