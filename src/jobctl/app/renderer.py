@@ -36,11 +36,17 @@ def render(
     ] = False,
     interactive: Annotated[
         bool,
-        typer.Option("--interactive", help="Open the resume section picker TUI."),
+        typer.Option(
+            "--interactive",
+            help="Deprecated: launch `jobctl` and use the Apply view instead.",
+        ),
     ] = False,
     use_tui: Annotated[
         bool,
-        typer.Option("--tui", help="Open the resume section picker TUI."),
+        typer.Option(
+            "--tui",
+            help="Deprecated: launch `jobctl` and use the Apply view instead.",
+        ),
     ] = False,
 ) -> None:
     """Render generated YAML materials to output files."""
@@ -68,15 +74,14 @@ def render(
         validate_section_names(disable_sections, RESUME_SECTION_DEFAULTS)
 
         if interactive or use_tui:
-            from jobctl.tui.materials_render import run_material_render_tui
-
-            result = run_material_render_tui(
-                yaml_paths[0],
-                template_name=template_name,
-                output_path=output_path,
+            typer.echo(
+                "`render --interactive/--tui` is deprecated. "
+                "Run `jobctl` and switch to the Apply view to render interactively.",
+                err=True,
             )
-            if result and result.rendered and result.output_path:
-                typer.echo(str(result.output_path))
+            from jobctl.app.common import run_tui
+
+            run_tui("apply")
             return
 
         for yaml_path in yaml_paths:

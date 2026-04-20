@@ -27,7 +27,7 @@ Reference plan: `docs/plan-v2.md`
 - [x] T14: Implement `KeybindingHelpOverlay` widget in `src/jobctl/tui/widgets/help_overlay.py`
 - [x] T15: Port `src/jobctl/tui/profile_view.py` to `src/jobctl/tui/views/graph.py` as `GraphView`
 - [x] T16: Port `src/jobctl/tui/tracker_view.py` to `src/jobctl/tui/views/tracker.py` as `TrackerView`
-- [ ] T17: Port `src/jobctl/tui/materials_render.py` to `src/jobctl/tui/views/apply.py` as stub `ApplyView`
+- [x] T17: Port `src/jobctl/tui/materials_render.py` to `src/jobctl/tui/views/apply.py` as stub `ApplyView`
 - [ ] T18: Implement stub `ChatView` Textual Screen in `src/jobctl/tui/views/chat.py`
 - [ ] T19: Wire `jobctl` (no args) to launch `JobctlApp`; add deprecation notices to old subcommands
 
