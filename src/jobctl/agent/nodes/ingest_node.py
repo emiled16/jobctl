@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from jobctl.agent.state import AgentState
+from jobctl.agent.state import AgentState, workflow_request_from_state
 from jobctl.core.events import AgentDoneEvent, AsyncEventBus, IngestDoneEvent
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
@@ -173,6 +173,24 @@ def ingest_node(
     payload = state.get("last_tool_result") or {}
     source_type = str(payload.get("source_type") or "").lower()
     source_value = payload.get("source_value")
+    workflow_request = workflow_request_from_state(state)
+    if workflow_request is not None:
+        request_payload = workflow_request["payload"]
+        if workflow_request["kind"] == "resume_ingest":
+            source_type = "resume"
+            source_value = (
+                request_payload.get("path")
+                or request_payload.get("resume_path")
+                or request_payload.get("source_value")
+            )
+        elif workflow_request["kind"] == "github_ingest":
+            source_type = "github"
+            source_value = (
+                request_payload.get("username_or_urls")
+                or request_payload.get("usernames")
+                or request_payload.get("urls")
+                or request_payload.get("source_value")
+            )
 
     if source_type == "resume":
         path = Path(str(source_value)).expanduser() if source_value else None
@@ -201,7 +219,17 @@ def ingest_node(
     if source_type == "github":
         usernames = source_value if isinstance(source_value, list) else [source_value]
         usernames = [str(u) for u in usernames if u]
-        preselected = payload.get("preselected_repos")
+        if not usernames:
+            return _append_assistant(
+                state,
+                "I need a GitHub username, profile URL, or repo URL before I can start ingesting.",
+                bus,
+            )
+        preselected = (
+            workflow_request["payload"].get("preselected_repos")
+            if workflow_request is not None
+            else payload.get("preselected_repos")
+        )
         job_id = start_github_ingest(
             conn=conn,
             provider=provider,

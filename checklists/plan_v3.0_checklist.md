@@ -13,7 +13,7 @@ Reference plan: `plans/plan_v3.0.md`
 
 - [x] T5: Make Chat streaming render one live assistant message instead of token-per-line output
 - [x] T6: Add provider streaming conformance tests for ChatView event rendering
-- [ ] T7: Define a structured Chat workflow request contract
+- [x] T7: Define a structured Chat workflow request contract
 - [ ] T8: Make `/mode` update persisted `AgentState.mode` through confirmation
 - [ ] T9: Add file selection validation before starting resume ingestion
 - [ ] T10: Implement inline GitHub ingest input flow
