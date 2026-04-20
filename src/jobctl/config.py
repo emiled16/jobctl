@@ -1,6 +1,9 @@
 """Configuration loading and persistence for jobctl projects."""
 
-from dataclasses import asdict, dataclass
+from __future__ import annotations
+
+import sys
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -9,12 +12,8 @@ import yaml
 
 CONFIG_DIR_NAME = ".jobctl"
 CONFIG_FILE_NAME = "config.yaml"
-DEFAULT_CONFIG = {
-    "openai_api_key": "",
-    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
-    "llm_model": "gpt-5.4",
-    "default_template": "emile-resume.html",
-}
+
+VALID_PROVIDERS = ("openai", "ollama", "codex")
 
 
 class ConfigError(Exception):
@@ -30,15 +29,49 @@ class ConfigValidationError(ConfigError):
 
 
 @dataclass(frozen=True)
+class OpenAIConfig:
+    api_key_env: str = "OPENAI_API_KEY"
+
+
+@dataclass(frozen=True)
+class OllamaConfig:
+    host: str = "http://localhost:11434"
+    embedding_model: str = "nomic-embed-text"
+
+
+@dataclass(frozen=True)
+class LLMConfig:
+    provider: str = "codex"
+    chat_model: str = "gpt-5.4"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    openai: OpenAIConfig = field(default_factory=OpenAIConfig)
+    ollama: OllamaConfig = field(default_factory=OllamaConfig)
+
+
+@dataclass(frozen=True)
 class JobctlConfig:
-    openai_api_key: str
-    embedding_model: str
-    llm_model: str
-    default_template: str
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    default_template: str = "emile-resume.html"
+
+    # Backward-compatibility shims for the v1 flat keys. New code should
+    # read from the nested ``llm`` block directly.
+    @property
+    def openai_api_key(self) -> str:
+        import os
+
+        return os.environ.get(self.llm.openai.api_key_env, "")
+
+    @property
+    def llm_model(self) -> str:
+        return self.llm.chat_model
+
+    @property
+    def embedding_model(self) -> str:
+        return self.llm.embedding_model
 
 
 def default_config() -> JobctlConfig:
-    return JobctlConfig(**DEFAULT_CONFIG)
+    return JobctlConfig()
 
 
 def find_project_root(start: Path) -> Path:
@@ -62,6 +95,7 @@ def load_config(project_root: Path) -> JobctlConfig:
     if not isinstance(raw_config, dict):
         raise ConfigValidationError("config.yaml must contain a mapping")
 
+    raw_config = _migrate_flat_config(raw_config)
     return _validate_config(raw_config)
 
 
@@ -71,34 +105,123 @@ def save_config(project_root: Path, config: JobctlConfig) -> None:
     config_path.write_text(yaml.safe_dump(asdict(config), sort_keys=False), encoding="utf-8")
 
 
-def config_field_names() -> tuple[str, ...]:
-    return tuple(JobctlConfig.__dataclass_fields__)
-
-
 def replace_config_value(config: JobctlConfig, key: str, value: str) -> JobctlConfig:
-    if key not in config_field_names():
-        raise ConfigValidationError(f"Unknown config key: {key}")
+    """Set a dotted-path config key (``llm.provider``, ``default_template``, …)."""
+    parts = key.split(".")
+    return _set_dotted(config, parts, value)
 
-    values = asdict(config)
-    values[key] = value
-    return JobctlConfig(**values)
+
+def _set_dotted(obj: Any, path: list[str], value: str) -> Any:
+    head, *rest = path
+    fields = {f.name for f in obj.__dataclass_fields__.values()}
+    if head not in fields:
+        raise ConfigValidationError(f"Unknown config key: {head}")
+    current = getattr(obj, head)
+    if not rest:
+        if hasattr(current, "__dataclass_fields__"):
+            raise ConfigValidationError(
+                f"Config key {head!r} is a group; use a dotted path like '{head}.<field>'."
+            )
+        return replace(obj, **{head: _coerce(type(current), value)})
+    if not hasattr(current, "__dataclass_fields__"):
+        raise ConfigValidationError(f"Config key {head!r} is not a group")
+    return replace(obj, **{head: _set_dotted(current, rest, value)})
+
+
+def _coerce(target_type: type, value: str) -> Any:
+    if target_type is str:
+        return value
+    if target_type is int:
+        return int(value)
+    if target_type is float:
+        return float(value)
+    if target_type is bool:
+        return value.lower() in {"1", "true", "yes", "on"}
+    return value
 
 
 def _config_path(project_root: Path) -> Path:
     return project_root / CONFIG_DIR_NAME / CONFIG_FILE_NAME
 
 
-def _validate_config(raw_config: dict[str, Any]) -> JobctlConfig:
-    missing_fields = [field for field in config_field_names() if field not in raw_config]
-    if missing_fields:
-        joined_fields = ", ".join(missing_fields)
-        raise ConfigValidationError(f"Missing required config field(s): {joined_fields}")
+def _migrate_flat_config(raw: dict[str, Any]) -> dict[str, Any]:
+    """Map old flat config keys to the new nested ``llm.*`` structure."""
+    flat_keys = {"openai_api_key", "embedding_model", "llm_model"}
+    if not flat_keys.intersection(raw):
+        return raw
 
-    values: dict[str, str] = {}
-    for field in config_field_names():
-        value = raw_config[field]
-        if not isinstance(value, str):
-            raise ConfigValidationError(f"Config field {field!r} must be a string")
-        values[field] = value
+    print(
+        "jobctl: migrating legacy flat LLM config keys; run 'jobctl config' to persist.",
+        file=sys.stderr,
+    )
 
-    return JobctlConfig(**values)
+    migrated = {k: v for k, v in raw.items() if k not in flat_keys}
+    llm_section = dict(raw.get("llm") or {})
+    if "llm_model" in raw and "chat_model" not in llm_section:
+        llm_section["chat_model"] = raw["llm_model"]
+    if "embedding_model" in raw and "embedding_model" not in llm_section:
+        llm_section["embedding_model"] = raw["embedding_model"]
+    if "openai_api_key" in raw:
+        openai_section = dict(llm_section.get("openai") or {})
+        openai_section.setdefault("api_key_env", "OPENAI_API_KEY")
+        llm_section["openai"] = openai_section
+        llm_section.setdefault("provider", "openai" if raw["openai_api_key"] else "codex")
+    else:
+        llm_section.setdefault("provider", "codex")
+    migrated["llm"] = llm_section
+    migrated.setdefault("default_template", raw.get("default_template", "emile-resume.html"))
+    return migrated
+
+
+def _validate_config(raw: dict[str, Any]) -> JobctlConfig:
+    llm_raw = raw.get("llm") or {}
+    if not isinstance(llm_raw, dict):
+        raise ConfigValidationError("llm block must be a mapping")
+
+    provider = str(llm_raw.get("provider") or "codex")
+    if provider not in VALID_PROVIDERS:
+        raise ConfigValidationError(
+            f"llm.provider must be one of {VALID_PROVIDERS!r}, got {provider!r}"
+        )
+
+    openai_raw = llm_raw.get("openai") or {}
+    if not isinstance(openai_raw, dict):
+        raise ConfigValidationError("llm.openai must be a mapping")
+    openai_cfg = OpenAIConfig(
+        api_key_env=str(openai_raw.get("api_key_env") or "OPENAI_API_KEY"),
+    )
+
+    ollama_raw = llm_raw.get("ollama") or {}
+    if not isinstance(ollama_raw, dict):
+        raise ConfigValidationError("llm.ollama must be a mapping")
+    ollama_cfg = OllamaConfig(
+        host=str(ollama_raw.get("host") or "http://localhost:11434"),
+        embedding_model=str(ollama_raw.get("embedding_model") or "nomic-embed-text"),
+    )
+
+    llm_cfg = LLMConfig(
+        provider=provider,
+        chat_model=str(llm_raw.get("chat_model") or "gpt-5.4"),
+        embedding_model=str(
+            llm_raw.get("embedding_model") or "sentence-transformers/all-MiniLM-L6-v2"
+        ),
+        openai=openai_cfg,
+        ollama=ollama_cfg,
+    )
+
+    default_template = str(raw.get("default_template") or "emile-resume.html")
+
+    return JobctlConfig(llm=llm_cfg, default_template=default_template)
+
+
+def config_field_names() -> tuple[str, ...]:
+    """Return the top-level dotted keys supported by ``jobctl config``."""
+    return (
+        "llm.provider",
+        "llm.chat_model",
+        "llm.embedding_model",
+        "llm.openai.api_key_env",
+        "llm.ollama.host",
+        "llm.ollama.embedding_model",
+        "default_template",
+    )

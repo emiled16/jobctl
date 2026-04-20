@@ -28,4 +28,8 @@ def init_command(ctx: typer.Context) -> None:
     copy_bundled_templates(jobctl_dir / "templates")
     save_config(project_root, default_config())
 
-    typer.echo("Initialized .jobctl/. Next, run `jobctl config openai_api_key <key>`.")
+    typer.echo(
+        "Initialized .jobctl/. Next, pick a provider: "
+        "`jobctl config llm.provider openai` (set OPENAI_API_KEY) or "
+        "`jobctl config llm.provider ollama`."
+    )

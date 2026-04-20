@@ -36,22 +36,29 @@ def validate_section_names(
 
 
 def print_config(config: JobctlConfig) -> None:
-    values = asdict(config)
-    values["openai_api_key"] = mask_api_key(config.openai_api_key)
+    values: dict[str, str] = {
+        "llm.provider": config.llm.provider,
+        "llm.chat_model": config.llm.chat_model,
+        "llm.embedding_model": config.llm.embedding_model,
+        "llm.openai.api_key_env": config.llm.openai.api_key_env,
+        "llm.ollama.host": config.llm.ollama.host,
+        "llm.ollama.embedding_model": config.llm.ollama.embedding_model,
+        "default_template": config.default_template,
+    }
 
     try:
         from rich.console import Console
         from rich.table import Table
     except ModuleNotFoundError:
-        for field in config_field_names():
-            typer.echo(f"{field}: {values[field]}")
+        for key in config_field_names():
+            typer.echo(f"{key}: {values[key]}")
         return
 
     table = Table(title="jobctl config")
     table.add_column("Key")
     table.add_column("Value")
-    for field in config_field_names():
-        table.add_row(field, values[field])
+    for key in config_field_names():
+        table.add_row(key, values[key])
 
     Console().print(table)
 
