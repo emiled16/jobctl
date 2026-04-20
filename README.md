@@ -1,20 +1,18 @@
 # jobctl
 
-`jobctl` is a Python CLI for building a local career knowledge graph and using it to support job search workflows. It stores project data in a `.jobctl/` directory, persists graph data in SQLite, uses local Transformers embeddings for retrieval, and uses the local Codex CLI in non-interactive mode for LLM calls.
+`jobctl` is a single-entry Textual TUI and CLI for building a local career knowledge graph and using it to accelerate job search workflows. It stores project data in a `.jobctl/` directory, persists a graph in SQLite, embeds nodes with Transformers (or a remote provider), and drives chat, ingestion, curation, and job-application flows through a LangGraph-powered agent.
 
-The project is under active implementation. The current working surface includes project initialization, config management, graph storage, resume/GitHub ingestion helpers, onboarding/yap conversation logic, job fetching, fit evaluation, resume and cover letter YAML generation, PDF rendering, an application tracker, and Textual TUI entry points.
+v2 collapses the legacy fleet of subcommands (`onboard`, `yap`, `agent`, `apply`, `track`, `profile`) into a unified TUI launched by running `jobctl`.
 
 ## Requirements
 
-- Python `3.12.8`
-- `pyenv`
-- `direnv` recommended
-- Local `codex` binary available on `PATH`
+- Python `3.11` or newer (pinned in `.python-version`)
+- `pyenv` recommended for Python installs
+- `direnv` recommended for venv activation
 - Native WeasyPrint libraries for PDF rendering
-- Playwright Chromium for browser-based job page fallback
-- Network access for first-time dependency and model downloads
-
-The pinned Python version is in `.python-version`.
+- Playwright Chromium for the job-posting scraper fallback
+- Network access on first run (dependency and embedding-model downloads)
+- One LLM backend: OpenAI, Ollama, or the local `codex` binary
 
 ## Setup
 
@@ -34,156 +32,112 @@ Verify the install:
 .venv/bin/python -m ruff format --check .
 ```
 
-## Local Models
-
-Chat and structured extraction use the local Codex CLI:
+## Quick start
 
 ```bash
-codex exec --help
+jobctl init    # scaffold .jobctl/ in the current directory
+jobctl         # launch the unified TUI
 ```
 
-Embeddings use Transformers locally. The default embedding model is:
-
-```text
-sentence-transformers/all-MiniLM-L6-v2
-```
-
-The first embedding call may download model files through Hugging Face. Embedding vectors are normalized and padded to `1536` dimensions to match the current SQLite vector table shape.
-
-## Usage
-
-Initialize a jobctl project in the current directory:
-
-```bash
-jobctl init
-```
-
-This creates:
+`jobctl init` creates:
 
 ```text
 .jobctl/
 ├── config.yaml
+├── jobctl.db
 ├── exports/
 └── templates/
     ├── resume/
     └── cover-letters/
 ```
 
-View config:
+## CLI surface
+
+v2 keeps only three subcommands. Everything else lives inside the TUI.
 
 ```bash
-jobctl config
+jobctl init                # scaffold a project
+jobctl config              # inspect or edit config.yaml
+jobctl config llm.provider openai
+jobctl render <yaml>       # headless PDF render
+jobctl                     # launch the TUI (same as jobctl --tui)
 ```
 
-Set a config value:
+`jobctl render --no-headless` and any interactive rendering redirect to the TUI's Apply view.
+
+## Inside the TUI
+
+| View     | Shortcut | Purpose                                                        |
+| -------- | -------- | -------------------------------------------------------------- |
+| Chat     | `g c`    | Talk to the LangGraph agent; slash commands dispatch actions.  |
+| Graph    | `g g`    | Browse the knowledge graph, edit nodes, inspect sources.       |
+| Tracker  | `g t`    | Review applications, cycle status, open PDFs, add follow-ups.  |
+| Apply    | `g a`    | See JD + fit evaluation, edit YAML, render PDFs, open in OS.   |
+| Curate   | `g u`    | Accept / reject / edit agent-proposed merges and rephrases.    |
+| Settings | `g ,`    | Read-only project and provider configuration summary.          |
+
+Global shortcuts: `:` opens the command palette, `?` opens the keybinding overlay, `Ctrl-B` toggles the background-jobs sidebar, `q` quits (with confirmation if background jobs are active).
+
+Chat slash commands: `/mode`, `/ingest resume`, `/ingest github`, `/curate`, `/apply`, `/graph`, `/report coverage`, `/report summary`, `/help`, `/quit`.
+
+## LLM providers
+
+The `llm` config block drives provider selection. Configure once in `.jobctl/config.yaml` or with `jobctl config`:
+
+```yaml
+llm:
+  provider: openai    # or ollama, codex
+  chat_model: gpt-4o-mini
+  embedding_model: text-embedding-3-small
+  openai:
+    api_key_env: OPENAI_API_KEY
+  ollama:
+    host: http://localhost:11434
+    embedding_model: nomic-embed-text
+```
+
+### OpenAI
 
 ```bash
-jobctl config llm_model gpt-5.4
+export OPENAI_API_KEY=sk-...
+jobctl config llm.provider openai
+jobctl config llm.chat_model gpt-4o-mini
 ```
 
-Start yap mode:
+### Ollama
 
 ```bash
-jobctl yap
+ollama serve
+jobctl config llm.provider ollama
+jobctl config llm.chat_model llama3.1:8b
+jobctl config llm.ollama.host http://localhost:11434
 ```
 
-Yap mode lets you paste freeform notes about your experience. The LLM proposes facts, you confirm or edit them, and confirmed facts are added to the SQLite knowledge graph.
-
-Start onboarding:
+### Legacy Codex CLI
 
 ```bash
-jobctl onboard
+jobctl config llm.provider codex
 ```
 
-Evaluate a job and generate materials:
+The embedding path still supports the local Transformers client (`sentence-transformers/all-MiniLM-L6-v2` by default) for provider-independent retrieval.
 
-```bash
-jobctl apply https://example.com/jobs/senior-engineer
-```
+## Resumable ingestion
 
-Render a generated YAML file or an export directory:
+Resume and GitHub ingestion record per-item checkpoints in `ingestion_jobs` and `ingested_items`. If a run crashes, re-launching the same `/ingest resume` or `/ingest github` slash command picks up where it left off, skipping items already persisted. Progress is streamed to the ProgressPanel sidebar via the `AsyncEventBus`.
 
-```bash
-jobctl render .jobctl/exports/2026-04-16-acme-senior-engineer/artifacts/drafts/resume.yaml
-jobctl render .jobctl/exports/2026-04-16-acme-senior-engineer
-```
+## Agent architecture
 
-Open the tracker or profile TUI:
+The agent is a LangGraph state machine:
 
-```bash
-jobctl track
-jobctl profile
-```
+1. `router` classifies the current turn based on slash command, `AgentState.mode`, and any pending confirmation.
+2. `chat_node` streams an LLM response and proactively suggests ingestion when resume/GitHub keywords appear.
+3. `graph_qa_node` binds `search_nodes` and vector-search tools for graph-grounded answers.
+4. `ingest_node`, `curate_node`, and `apply_node` orchestrate background jobs through `BackgroundJobRunner` and the typed `AsyncEventBus`.
+5. `wait_for_confirmation_node` pauses until the corresponding `ConfirmationAnsweredEvent` arrives, enabling inline `InlineConfirmCard`, `FilePicker`, and `MultiSelectList` interactions inside chat.
 
-Use logging flags before the subcommand:
+`AgentState` is persisted per session to the `agent_sessions` table and restored on every launch.
 
-```bash
-jobctl --verbose apply ./sample-jd.txt
-jobctl --quiet render .jobctl/exports/latest
-```
-
-## Implemented
-
-- Click CLI with `init`, `config`, `onboard`, `yap`, `apply`, `render`, `track`, and `profile`
-- `.jobctl/` project directory model
-- Config load/save/discovery
-- SQLite connection management and migrations
-- Knowledge graph tables and CRUD operations
-- Vector table initialization with sqlite-vec when available and SQLite fallback otherwise
-- Local Transformers embedding client
-- Local Codex CLI chat and structured-output client
-- Pydantic schemas for extracted facts, job descriptions, fit evaluation, and proposed facts
-- Resume text extraction for `.txt`, `.md`, `.pdf`, and `.docx`
-- GitHub repository metadata ingestion helpers
-- Onboarding coverage analysis and follow-up generation helpers
-- Yap mode extraction, confirmation, and persistence loop
-- Job description HTTP fetch, Playwright fallback, and structured extraction
-- Fit evaluation against graph context
-- Tailored resume and cover letter YAML generation with review/edit loops
-- ATS-oriented HTML templates and WeasyPrint PDF rendering
-- Application tracker tables and CRUD operations
-- Apply pipeline orchestration
-- Textual tracker and profile screens
-
-## Configuration
-
-`jobctl config` manages:
-
-```text
-openai_api_key      Kept for future OpenAI provider reuse; local Codex mode ignores it.
-embedding_model     Local Transformers embedding model.
-llm_model           Model name passed to `codex exec`.
-default_template    Default resume template name.
-```
-
-## How It Works
-
-`jobctl` stores career facts as typed graph nodes and relationship edges in SQLite. Resume, GitHub, onboarding, and yap inputs create or update this graph. Local Transformers embeddings are stored per node, then job descriptions are embedded and matched against graph nodes to retrieve relevant experience. The local Codex CLI produces structured job descriptions, fit evaluations, and tailored YAML materials. YAML is reviewed before rendering to PDF through HTML templates.
-
-## Development
-
-Run the full test suite:
-
-```bash
-.venv/bin/python -m pytest
-```
-
-Run linting and formatting checks:
-
-```bash
-.venv/bin/python -m ruff check .
-.venv/bin/python -m ruff format --check .
-```
-
-Check Poetry metadata:
-
-```bash
-.venv/bin/poetry check --lock
-```
-
-## Data
-
-Project data is local to each initialized directory:
+## Data layout
 
 ```text
 .jobctl/config.yaml
@@ -194,4 +148,18 @@ Project data is local to each initialized directory:
 .jobctl/templates/cover-letters/
 ```
 
-The `.jobctl/` directory is ignored by git.
+The `.jobctl/` directory is gitignored.
+
+## Development
+
+```bash
+.venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
+```
+
+Run only the TUI smoke test:
+
+```bash
+.venv/bin/python -m pytest -k smoke
+```
