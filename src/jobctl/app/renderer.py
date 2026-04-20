@@ -1,4 +1,4 @@
-"""Material rendering command."""
+"""Headless material rendering command (retained after v2 deprecation sweep)."""
 
 from pathlib import Path
 from typing import Annotated
@@ -7,13 +7,19 @@ import typer
 
 from jobctl.app.common import command_error, validate_section_names
 
-app = typer.Typer(help="Render generated YAML materials.", invoke_without_command=True)
+app = typer.Typer(
+    help="Render generated YAML materials to PDFs (headless only).",
+    invoke_without_command=True,
+)
 
 
 @app.callback(invoke_without_command=True)
 def render(
     ctx: typer.Context,
-    path: Annotated[Path, typer.Argument(exists=True, readable=True, help="YAML file or folder.")],
+    path: Annotated[
+        Path,
+        typer.Argument(exists=True, readable=True, help="YAML file or folder."),
+    ],
     enable_sections: Annotated[
         list[str],
         typer.Option("--enable", help="Resume section to include."),
@@ -32,20 +38,8 @@ def render(
     ] = None,
     validate_only: Annotated[
         bool,
-        typer.Option("--validate-only", help="Validate YAML without rendering a PDF."),
-    ] = False,
-    interactive: Annotated[
-        bool,
         typer.Option(
-            "--interactive",
-            help="Deprecated: launch `jobctl` and use the Apply view instead.",
-        ),
-    ] = False,
-    use_tui: Annotated[
-        bool,
-        typer.Option(
-            "--tui",
-            help="Deprecated: launch `jobctl` and use the Apply view instead.",
+            "--validate-only", help="Validate YAML without rendering a PDF."
         ),
     ] = False,
     headless: Annotated[
@@ -53,14 +47,24 @@ def render(
         typer.Option(
             "--headless/--no-headless",
             help=(
-                "Render the PDF non-interactively. Will become the only "
-                "supported mode; use `jobctl` for interactive rendering."
+                "Retained for backward compatibility; --no-headless now "
+                "redirects to the unified TUI."
             ),
         ),
     ] = True,
 ) -> None:
-    """Render generated YAML materials to output files."""
+    """Render generated YAML materials to PDFs without launching the TUI."""
     if ctx.invoked_subcommand is not None:
+        return
+
+    if not headless:
+        typer.echo(
+            "Interactive render is only available via `jobctl` (Apply view).",
+            err=True,
+        )
+        from jobctl.app.common import run_tui
+
+        run_tui("apply")
         return
 
     try:
@@ -76,23 +80,12 @@ def render(
         if not yaml_paths:
             raise command_error(f"No YAML files found in {path}")
         if output_path is not None and len(yaml_paths) > 1:
-            raise command_error("--output can only be used with a single YAML file.")
-        if (interactive or use_tui) and len(yaml_paths) > 1:
-            raise command_error("The render TUI can only be used with a single YAML file.")
+            raise command_error(
+                "--output can only be used with a single YAML file."
+            )
 
         validate_section_names(enable_sections, RESUME_SECTION_DEFAULTS)
         validate_section_names(disable_sections, RESUME_SECTION_DEFAULTS)
-
-        if interactive or use_tui or not headless:
-            typer.echo(
-                "`jobctl render` interactive mode is deprecated. "
-                "Run `jobctl` and switch to the Apply view instead.",
-                err=True,
-            )
-            from jobctl.app.common import run_tui
-
-            run_tui("apply")
-            return
 
         for yaml_path in yaml_paths:
             enabled = set(enable_sections)

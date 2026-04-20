@@ -266,7 +266,7 @@ class ChatView(Screen):
             log.write(Markdown("_reports require a project database_"))
             return
         try:
-            from jobctl.conversation.onboard import analyze_coverage
+            from jobctl.agent.coverage import analyze_coverage
         except Exception as exc:  # pragma: no cover - defensive
             log.write(Markdown(f"_could not load coverage helpers: {exc}_"))
             return

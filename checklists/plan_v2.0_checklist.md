@@ -80,7 +80,7 @@ Reference plan: `docs/plan-v2.md`
 
 ## M6: Polish and Deprecation Removal
 
-- [ ] T45: Remove deprecated CLI subcommands; retain `init`, `config`, and `render --headless`
+- [x] T45: Remove deprecated CLI subcommands; retain `init`, `config`, and `render --headless`
 - [ ] T46: Define a central theme in `src/jobctl/tui/theme.py` and apply it across all views
 - [ ] T47: Add Textual `Pilot` smoke test that boots the TUI and navigates all views
 - [ ] T48: Update `README.md` to reflect the v2 single-entry TUI
