@@ -41,7 +41,7 @@ Reference plan: `docs/plan-v2.md`
 - [x] T23: Implement `graph_qa_node` with `search_nodes` and vector-search tools in `src/jobctl/agent/nodes/graph_qa_node.py`
 - [x] T24: Implement mode-switch confirmation flow using `ConfirmationRequestedEvent` and `ConfirmationAnsweredEvent`
 - [x] T25: Persist `AgentState` per-session to `agent_sessions` table; reload on `JobctlApp` start
-- [ ] T26: Implement slash-command dispatcher in `ChatView` for `/mode`, `/quit`, `/help`, `/graph`, `/report`
+- [x] T26: Implement slash-command dispatcher in `ChatView` for `/mode`, `/quit`, `/help`, `/graph`, `/report`
 - [ ] T27: Wire `LangGraphRunner` to stream agent tokens into `ChatView` via `AsyncEventBus`
 
 ---

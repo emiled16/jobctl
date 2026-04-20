@@ -233,7 +233,60 @@ class ChatView(Screen):
             setattr(app, "agent_mode", rest)
             log.write(Markdown(f"_mode set to **{rest}**_"))
             return True
+        if command == "graph":
+            self.app.switch_screen("graph")
+            return True
+        if command == "report":
+            self._render_report(rest or "summary")
+            return True
         return False
+
+    def _render_report(self, kind: str) -> None:
+        log = self.query_one("#chat-log", RichLog)
+        conn = getattr(self.app, "conn", None)
+        if conn is None:
+            log.write(Markdown("_reports require a project database_"))
+            return
+        try:
+            from jobctl.conversation.onboard import analyze_coverage
+        except Exception as exc:  # pragma: no cover - defensive
+            log.write(Markdown(f"_could not load coverage helpers: {exc}_"))
+            return
+        try:
+            coverage = analyze_coverage(conn)
+        except Exception as exc:
+            log.write(Markdown(f"_analyze_coverage failed: {exc}_"))
+            return
+
+        kind = kind.lower()
+        if kind == "coverage":
+            missing = ", ".join(coverage.get("missing_sections") or []) or "(none)"
+            lines = [
+                "### Coverage report",
+                f"- roles: **{coverage.get('roles_count', 0)}**",
+                f"- skills: **{coverage.get('skills_count', 0)}**",
+                f"- achievements: **{coverage.get('achievements_count', 0)}**",
+                f"- education present: **{coverage.get('has_education', False)}**",
+                f"- stories present: **{coverage.get('has_stories', False)}**",
+                f"- missing sections: _{missing}_",
+            ]
+            log.write(Markdown("\n".join(lines)))
+            return
+
+        if kind == "summary":
+            lines = ["### Graph summary"]
+            for key in (
+                "roles_count",
+                "skills_count",
+                "achievements_count",
+                "has_education",
+                "has_stories",
+            ):
+                lines.append(f"- {key}: **{coverage.get(key)}**")
+            log.write(Markdown("\n".join(lines)))
+            return
+
+        log.write(Markdown(f"_unknown /report target `{kind}`; try `coverage` or `summary`._"))
 
     async def _pump_events(self) -> None:
         assert self._subscription is not None
