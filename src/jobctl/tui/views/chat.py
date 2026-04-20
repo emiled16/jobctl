@@ -99,6 +99,7 @@ class ChatView(Screen):
             )
         )
         self._handle_pending_slash_if_any()
+        self._handle_pending_chat_message_if_any()
 
     def on_unmount(self) -> None:
         if self._pump_task is not None:
@@ -117,6 +118,14 @@ class ChatView(Screen):
             delattr(app, "pending_slash")
         except AttributeError:  # pragma: no cover - defensive
             pass
+        self._handle_submission(str(pending))
+
+    def _handle_pending_chat_message_if_any(self) -> None:
+        app = self.app
+        pending = getattr(app, "pending_chat_message", None)
+        if not pending:
+            return
+        app.pending_chat_message = None
         self._handle_submission(str(pending))
 
     def on_key(self, event: events.Key) -> None:

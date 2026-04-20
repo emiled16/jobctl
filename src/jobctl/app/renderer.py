@@ -48,6 +48,16 @@ def render(
             help="Deprecated: launch `jobctl` and use the Apply view instead.",
         ),
     ] = False,
+    headless: Annotated[
+        bool,
+        typer.Option(
+            "--headless/--no-headless",
+            help=(
+                "Render the PDF non-interactively. Will become the only "
+                "supported mode; use `jobctl` for interactive rendering."
+            ),
+        ),
+    ] = True,
 ) -> None:
     """Render generated YAML materials to output files."""
     if ctx.invoked_subcommand is not None:
@@ -73,10 +83,10 @@ def render(
         validate_section_names(enable_sections, RESUME_SECTION_DEFAULTS)
         validate_section_names(disable_sections, RESUME_SECTION_DEFAULTS)
 
-        if interactive or use_tui:
+        if interactive or use_tui or not headless:
             typer.echo(
-                "`render --interactive/--tui` is deprecated. "
-                "Run `jobctl` and switch to the Apply view to render interactively.",
+                "`jobctl render` interactive mode is deprecated. "
+                "Run `jobctl` and switch to the Apply view instead.",
                 err=True,
             )
             from jobctl.app.common import run_tui

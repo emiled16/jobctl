@@ -1,4 +1,3 @@
-import sqlite3
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -85,19 +84,25 @@ def test_run_yap_persists_confirmed_facts(
     assert "Added 1 facts" in capsys.readouterr().out
 
 
-def test_yap_cli_opens_project_and_runs_loop(tmp_path: Path, monkeypatch) -> None:
+def test_yap_cli_is_deprecated_and_prints_warning(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
-    calls: list[sqlite3.Connection] = []
+    from jobctl.app import common as common_module
 
-    def fake_run_yap(conn: sqlite3.Connection, _llm_client) -> None:
-        calls.append(conn)
+    calls: list[str] = []
 
-    monkeypatch.setattr(yap, "run_yap", fake_run_yap)
+    def fake_run_tui(start_screen: str = "chat", initial_message: str | None = None) -> None:
+        calls.append(start_screen)
 
-    with runner.isolated_filesystem(temp_dir=tmp_path) as isolated_dir:
+    monkeypatch.setattr(common_module, "run_tui", fake_run_tui)
+    # Also patch the reference already imported into the yap module.
+    from jobctl.app import yap as yap_cli
+
+    monkeypatch.setattr(yap_cli, "run_tui", fake_run_tui)
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
         runner.invoke(main, ["init"], catch_exceptions=False)
         result = runner.invoke(main, ["yap"], catch_exceptions=False)
 
         assert result.exit_code == 0
-        assert calls
-        assert (Path(isolated_dir) / ".jobctl" / "jobctl.db").exists()
+        assert calls == ["chat"]
+        assert "deprecated" in result.output.lower()

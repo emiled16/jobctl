@@ -1,38 +1,24 @@
-"""Onboarding command."""
+"""Deprecated onboarding command — now launches the TUI chat view."""
 
-from pathlib import Path
+from __future__ import annotations
 
 import typer
 
-from jobctl.app.common import command_error
-from jobctl.config import CONFIG_DIR_NAME, ConfigError, find_project_root, load_config
+from jobctl.app.common import deprecation_warning, run_tui
 
-app = typer.Typer(help="Start onboarding.", invoke_without_command=True)
+app = typer.Typer(help="(deprecated) Start onboarding.", invoke_without_command=True)
 
 
 @app.callback(invoke_without_command=True)
 def onboard(ctx: typer.Context) -> None:
-    """Start the onboarding conversation."""
+    """Start the onboarding conversation inside the TUI chat view."""
     if ctx.invoked_subcommand is not None:
         return
-
-    try:
-        project_root = find_project_root(Path.cwd())
-        config = load_config(project_root)
-        from jobctl.conversation.onboard import run_onboarding
-        from jobctl.db.connection import get_connection
-        from jobctl.llm.client import LLMClient
-
-        db_path = project_root / CONFIG_DIR_NAME / "jobctl.db"
-        llm_client = LLMClient(
-            api_key=config.openai_api_key,
-            model=config.llm_model,
-            cwd=project_root,
-        )
-        conn = get_connection(db_path)
-        try:
-            run_onboarding(conn, llm_client, config)
-        finally:
-            conn.close()
-    except ConfigError as exc:
-        raise command_error(str(exc)) from exc
+    deprecation_warning("onboard", "jobctl")
+    run_tui(
+        start_screen="chat",
+        initial_message=(
+            "Hi! Let's get your profile set up. "
+            "I can ingest your resume or your GitHub repositories — which would you like to start with?"
+        ),
+    )

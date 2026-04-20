@@ -84,7 +84,7 @@ def copy_bundled_templates(destination: Path) -> None:
                     shutil.copyfile(source_path, target_dir / template.name)
 
 
-def run_tui(start_screen: str = "chat") -> None:
+def run_tui(start_screen: str = "chat", initial_message: str | None = None) -> None:
     try:
         project_root = find_project_root(Path.cwd())
         config = load_config(project_root)
@@ -101,8 +101,18 @@ def run_tui(start_screen: str = "chat") -> None:
                 config=config,
                 provider=provider,
                 start_screen=start_screen,
+                initial_message=initial_message,
             ).run()
         finally:
             conn.close()
     except ConfigError as exc:
         raise command_error(str(exc)) from exc
+
+
+def deprecation_warning(command: str, replacement: str) -> None:
+    """Print a deprecation warning for a legacy subcommand."""
+    typer.echo(
+        f"`jobctl {command}` is deprecated and will be removed in a future "
+        f"release. Use `{replacement}` instead.",
+        err=True,
+    )

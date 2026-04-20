@@ -109,6 +109,7 @@ class JobctlApp(App):
         job_store: BackgroundJobStore | None = None,
         job_runner: BackgroundJobRunner | None = None,
         start_screen: str = "chat",
+        initial_message: str | None = None,
     ) -> None:
         super().__init__()
         if start_screen not in SCREEN_NAMES:
@@ -123,6 +124,7 @@ class JobctlApp(App):
         self.start_screen = start_screen
         self.session_id = uuid.uuid4().hex
         self._palette_commands: list[PaletteCommand] = []
+        self.pending_chat_message: str | None = initial_message
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
