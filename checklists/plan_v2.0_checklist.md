@@ -51,7 +51,7 @@ Reference plan: `docs/plan-v2.md`
 - [ ] T28: Implement `ingest_node` orchestrator in `src/jobctl/agent/nodes/ingest_node.py`
 - [x] T29: Implement `FilePicker` inline Textual widget in `src/jobctl/tui/widgets/file_picker.py`
 - [x] T30: Implement `MultiSelectList` inline Textual widget in `src/jobctl/tui/widgets/multi_select.py`
-- [ ] T31: Refactor `src/jobctl/ingestion/resume.py` to emit `IngestProgressEvent` and write checkpoints
+- [x] T31: Refactor `src/jobctl/ingestion/resume.py` to emit `IngestProgressEvent` and write checkpoints
 - [ ] T32: Refactor `src/jobctl/ingestion/github.py` to use `ingested_items` for deduplication and incremental refresh
 - [ ] T33: Implement `ProgressPanel` sidebar widget in `src/jobctl/tui/widgets/progress_panel.py`
 - [ ] T34: Add proactive ingestion suggestion to `chat_node` when resume or GitHub keywords appear

@@ -1,5 +1,8 @@
 """Resume file parsing and fact persistence."""
 
+from __future__ import annotations
+
+import logging
 import os
 import shlex
 import sqlite3
@@ -13,9 +16,18 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.syntax import Syntax
 
+from jobctl.core.events import (
+    AsyncEventBus,
+    IngestDoneEvent,
+    IngestErrorEvent,
+    IngestProgressEvent,
+)
+from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.db.graph import add_edge, add_node, search_nodes
 from jobctl.db.vectors import embed_node
 from jobctl.llm.schemas import ExtractedFact, ExtractedProfile
+
+logger = logging.getLogger(__name__)
 
 
 class UnsupportedFormatError(ValueError):
@@ -57,37 +69,94 @@ def persist_facts(
     facts: list[ExtractedFact],
     llm_client,
     interactive: bool = True,
+    *,
+    bus: AsyncEventBus | None = None,
+    store: BackgroundJobStore | None = None,
+    job_id: str | None = None,
 ) -> int:
+    """Persist ``facts`` into the graph and emit progress events.
+
+    When ``bus`` + ``store`` + ``job_id`` are provided the function writes a
+    checkpoint per fact and publishes :class:`IngestProgressEvent`s,
+    :class:`IngestDoneEvent` / :class:`IngestErrorEvent` wrappers. Legacy
+    callers that omit those arguments keep the original Rich-prompt flow
+    for backwards compatibility while the v2 agent migrates.
+    """
     persisted_count = 0
-    for fact in facts:
-        accepted_fact = _confirm_fact(fact) if interactive else fact
+    total = len(facts)
+    for index, fact in enumerate(facts, start=1):
+        external_id = f"{fact.entity_type}:{fact.entity_name}"
+        if store is not None and job_id is not None:
+            if store.is_item_seen(job_id, external_id=external_id):
+                _publish_progress(bus, job_id, index, total, fact.entity_name + " (skipped)")
+                continue
+
+        accepted_fact = _confirm_fact(fact) if interactive and bus is None else fact
         if accepted_fact is None:
+            if store is not None and job_id is not None:
+                store.mark_item_done(job_id, external_id=external_id, status="skipped")
             continue
 
-        entity_type = accepted_fact.entity_type.lower()
-        node_id = add_node(
-            conn,
-            entity_type,
-            accepted_fact.entity_name,
-            accepted_fact.properties,
-            accepted_fact.text_representation,
-        )
-        embed_node(conn, node_id, llm_client)
-
-        related_node_id = _resolve_related_node(conn, accepted_fact, llm_client)
-        if related_node_id is not None and accepted_fact.relation:
-            source_id, target_id = _edge_direction(
+        try:
+            entity_type = accepted_fact.entity_type.lower()
+            node_id = add_node(
                 conn,
-                node_id,
-                related_node_id,
-                accepted_fact.relation,
                 entity_type,
+                accepted_fact.entity_name,
+                accepted_fact.properties,
+                accepted_fact.text_representation,
             )
-            add_edge(conn, source_id, target_id, accepted_fact.relation, {})
+            embed_node(conn, node_id, llm_client)
 
-        persisted_count += 1
+            related_node_id = _resolve_related_node(conn, accepted_fact, llm_client)
+            if related_node_id is not None and accepted_fact.relation:
+                source_id, target_id = _edge_direction(
+                    conn,
+                    node_id,
+                    related_node_id,
+                    accepted_fact.relation,
+                    entity_type,
+                )
+                add_edge(conn, source_id, target_id, accepted_fact.relation, {})
 
+            persisted_count += 1
+            if store is not None and job_id is not None:
+                store.mark_item_done(job_id, external_id=external_id)
+            _publish_progress(bus, job_id, index, total, accepted_fact.entity_name)
+        except Exception as exc:  # noqa: BLE001 - surface to bus, do not swallow
+            logger.exception("persist_facts failed on %s", external_id)
+            if bus is not None:
+                bus.publish(
+                    IngestErrorEvent(
+                        source="resume", error=str(exc), job_id=job_id
+                    )
+                )
+
+    if bus is not None:
+        bus.publish(
+            IngestDoneEvent(source="resume", facts_added=persisted_count, job_id=job_id)
+        )
     return persisted_count
+
+
+def _publish_progress(
+    bus: AsyncEventBus | None,
+    job_id: str | None,
+    current: int,
+    total: int,
+    message: str,
+) -> None:
+    if bus is None:
+        return
+    bus.publish(
+        IngestProgressEvent(
+            source="resume",
+            current=current,
+            total=total,
+            message=message,
+            job_id=job_id,
+        )
+    )
 
 
 def _read_pdf(file_path: Path) -> str:
