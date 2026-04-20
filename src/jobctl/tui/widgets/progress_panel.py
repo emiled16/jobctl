@@ -242,7 +242,10 @@ class ProgressPanel(Vertical):
             card = self.query_one(f"#job-{entry.key.replace(':', '-')}", _JobCard)
         except Exception:
             return
-        card.refresh_entry()
+        try:
+            card.refresh_entry()
+        except Exception:
+            self.call_after_refresh(card.refresh_entry)
 
     def _recompute_active(self) -> None:
         has_active = any(e.state in {"running", "waiting_for_user"} for e in self._entries.values())
