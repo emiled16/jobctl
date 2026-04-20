@@ -100,9 +100,7 @@ async def test_resume_file_picker_submits_structured_workflow(tmp_path: Path) ->
         picker._submit_selection()
         await pilot.pause()
 
-        assert runner.requests == [
-            {"kind": "resume_ingest", "payload": {"path": str(resume_path)}}
-        ]
+        assert runner.requests == [{"kind": "resume_ingest", "payload": {"path": str(resume_path)}}]
         with pytest.raises(NoMatches):
             app.query_one(FilePicker)
 

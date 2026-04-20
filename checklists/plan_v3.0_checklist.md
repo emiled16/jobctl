@@ -32,29 +32,29 @@ Reference plan: `plans/plan_v3.0.md`
 
 ## M4: Apply Flow Completion And Material Actions
 
-- [ ] T20: Persist rendered PDF paths from ApplyView actions
-- [ ] T21: Implement real cover-letter generation from ApplyView or disable the button
-- [ ] T22: Auto-refresh ApplyView on apply job completion
-- [ ] T23: Add tests for Apply render, open-path availability, cover-letter action, and auto-refresh
+- [x] T20: Persist rendered PDF paths from ApplyView actions
+- [x] T21: Implement real cover-letter generation from ApplyView or disable the button
+- [x] T22: Auto-refresh ApplyView on apply job completion
+- [x] T23: Add tests for Apply render, open-path availability, cover-letter action, and auto-refresh
 
 ## M5: Curation Flow That Actually Applies User Decisions
 
-- [ ] T24: Implement Save and Cancel handling in `CurationProposalCard`
-- [ ] T25: Add proposal application functions for merge, rephrase, connect, and prune
-- [ ] T26: Wire CurateView accept/edit actions to proposal application
-- [ ] T27: Implement or remove CurateView `accept_group` binding
-- [ ] T28: Add tests for proposal edit and accept effects
+- [x] T24: Implement Save and Cancel handling in `CurationProposalCard`
+- [x] T25: Add proposal application functions for merge, rephrase, connect, and prune
+- [x] T26: Wire CurateView accept/edit actions to proposal application
+- [x] T27: Implement or remove CurateView `accept_group` binding
+- [x] T28: Add tests for proposal edit and accept effects
 
 ## M6: Graph And Tracker Safety Polish
 
-- [ ] T29: Make Graph actions operate on the tree cursor when no detail is selected
-- [ ] T30: Add confirmation and status feedback for Graph delete
-- [ ] T31: Resolve Escape behavior between global blur and Graph search clear
-- [ ] T32: Add visible Tracker notes save status and error handling
-- [ ] T33: Add tests for Graph safety and Tracker save feedback
+- [x] T29: Make Graph actions operate on the tree cursor when no detail is selected
+- [x] T30: Add confirmation and status feedback for Graph delete
+- [x] T31: Resolve Escape behavior between global blur and Graph search clear
+- [x] T32: Add visible Tracker notes save status and error handling
+- [x] T33: Add tests for Graph safety and Tracker save feedback
 
 ## M7: End-To-End UX Acceptance Coverage
 
-- [ ] T34: Add an end-to-end "happy path" TUI pilot test
-- [ ] T35: Update README and UX flow assessment after fixes land
-- [ ] T36: Run full verification and capture residual UX risks
+- [x] T34: Add an end-to-end "happy path" TUI pilot test
+- [x] T35: Update README and UX flow assessment after fixes land
+- [x] T36: Run full verification and capture residual UX risks

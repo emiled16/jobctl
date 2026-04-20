@@ -82,7 +82,11 @@ Global shortcuts: `Ctrl-P` (or `:`) opens the command palette, `?` opens the key
 
 Inside the command palette: `Up` / `Down` (or `Ctrl-N` / `Ctrl-P`) move the selection while typing the filter, `Enter` runs the highlighted command, `Esc` closes.
 
-Chat slash commands: `/mode`, `/ingest resume`, `/ingest github`, `/curate`, `/apply`, `/graph`, `/report coverage`, `/report summary`, `/help`, `/quit`.
+Chat slash commands: `/mode`, `/apply`, `/apply <url-or-text>`, `/graph`, `/tracker`, `/curate`, `/settings`, `/report coverage`, `/report summary`, `/help`, `/quit`.
+
+The command palette separates view navigation from workflow starts. View commands switch directly to the selected view. Workflow commands open the required input first: resume ingestion opens a validated file picker, GitHub ingestion asks for usernames/profile/repo URLs, Apply asks for a job URL or pasted JD text, and Curate opens the Curate view.
+
+Chat model output streams into one live assistant message while the provider is responding, then lands as a single completed assistant message. `/mode <name>` now uses an inline confirmation and persists to the agent session state used by the router.
 
 ## LLM providers
 
@@ -127,7 +131,19 @@ The embedding path still supports the local Transformers client (`sentence-trans
 
 ## Resumable ingestion
 
-Resume and GitHub ingestion record per-item checkpoints in `ingestion_jobs` and `ingested_items`. If a run crashes, re-launching the same `/ingest resume` or `/ingest github` slash command picks up where it left off, skipping items already persisted. Progress is streamed to the ProgressPanel sidebar via the `AsyncEventBus`.
+Resume and GitHub ingestion record per-item checkpoints in `ingestion_jobs` and `ingested_items`. If a run crashes, starting the same workflow again picks up where it left off, skipping items already persisted. Progress is streamed to the sidebar via the `AsyncEventBus`.
+
+Background work publishes lifecycle events with `queued`, `running`, `waiting_for_user`, `done`, `error`, and `cancelled` phases. The top status line shows the active job or input-waiting state, and the sidebar keeps recent done/error cards visible.
+
+## Apply, Curate, Graph, And Tracker Notes
+
+Apply view can render a selected resume YAML to PDF, persist the generated PDF path back to the tracker, and then open the recorded PDF path. It can also generate cover-letter YAML/PDF when the selected application has structured JD and fit-evaluation data. Apply view refreshes when apply jobs complete.
+
+Curate proposal cards support Accept, Reject, Edit, Save, and Cancel. Accepted merge/rephrase/connect/prune proposals apply durable graph changes before the proposal is marked accepted.
+
+Graph edit and delete actions operate on the tree cursor even before pressing Enter. Delete uses a confirmation dialog with node and relationship context. Escape clears Graph search text before blurring the field.
+
+Tracker notes show visible save success or failure status and can be saved explicitly with `Ctrl-S`.
 
 ## Agent architecture
 

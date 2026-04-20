@@ -357,8 +357,23 @@ class JobctlApp(App):
 
     def action_blur_focus(self) -> None:
         focused = self.focused
-        if focused is not None:
-            self.set_focus(None)
+        if focused is None:
+            return
+        if getattr(focused, "id", None) == "graph-search":
+            from textual.widgets import Input
+
+            if isinstance(focused, Input) and focused.value:
+                focused.value = ""
+                try:
+                    from jobctl.tui.views.graph import GraphView
+
+                    graph = self.query_one(GraphView)
+                    graph._search_term = ""
+                    graph._refresh(keep_filter=True)
+                except Exception:
+                    pass
+                return
+        self.set_focus(None)
 
     def action_open_command_palette(self) -> None:
         from jobctl.tui.widgets.command_palette import CommandPaletteOverlay

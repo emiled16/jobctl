@@ -11,6 +11,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Collapsible, Label, Static
 
 from jobctl.core.jobs.runner import BackgroundJobRunner
+from jobctl.curation.apply import apply_proposal
 from jobctl.curation.proposals import CurationProposalStore, Proposal
 from jobctl.tui.widgets.proposal_card import CurationProposalCard
 
@@ -27,7 +28,6 @@ class CurateView(Vertical):
     BINDINGS = [
         Binding("r", "reload", "Reload", show=True),
         Binding("c", "run_curation", "Run curation", show=True),
-        Binding("ctrl+a", "accept_group", "Accept group", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -119,8 +119,17 @@ class CurateView(Vertical):
             self.action_run_curation()
 
     def on_curation_proposal_card_accepted(self, event: CurationProposalCard.Accepted) -> None:
+        proposal = self.store.get(event.proposal_id)
+        if proposal is None:
+            self.query_one("#status", Label).update("Proposal not found")
+            return
+        try:
+            apply_proposal(self.conn, proposal.kind, proposal.payload)
+        except Exception as exc:  # noqa: BLE001
+            self.query_one("#status", Label).update(f"Accept failed: {exc}")
+            return
         self.store.accept(event.proposal_id)
-        self.query_one("#status", Label).update("Accepted proposal")
+        self.query_one("#status", Label).update("Accepted and applied proposal")
 
     def on_curation_proposal_card_rejected(self, event: CurationProposalCard.Rejected) -> None:
         self.store.reject(event.proposal_id)

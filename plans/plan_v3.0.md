@@ -258,3 +258,9 @@ Success criteria:
 ## Revisions
 
 - v3.0: Initial version. Defines the seamless TUI UX hardening milestone from the current UX assessment, adding explicit streaming Chat output, background task spinner/visibility, complete workflow starts, and fixes for broken navigation, real agent mode changes, Apply, Curate, Graph, and Tracker flows.
+
+## Residual UX Risks
+
+- Curation rephrase updates node text but does not force vector re-embedding unless a provider-aware path is added to the proposal applier.
+- Graph delete is confirmed but still permanent; there is no undo or archive policy yet.
+- Apply auto-refresh selects the most recent application on apply job completion because lifecycle events do not yet carry the created application id.

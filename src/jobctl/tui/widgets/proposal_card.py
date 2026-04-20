@@ -42,6 +42,9 @@ class CurationProposalCard(Vertical):
     CurationProposalCard TextArea {
         height: 10;
     }
+    CurationProposalCard #edit-error {
+        color: #f38ba8;
+    }
     """
 
     class Accepted(Message):
@@ -113,6 +116,10 @@ class CurationProposalCard(Vertical):
             self.action_reject()
         elif event.button.id == "edit":
             self.action_edit()
+        elif event.button.id == "save":
+            self.action_save()
+        elif event.button.id == "cancel":
+            self.action_cancel()
 
     def action_accept(self) -> None:
         self.post_message(self.Accepted(self.proposal.id))
@@ -133,6 +140,7 @@ class CurationProposalCard(Vertical):
         self.mount(
             Vertical(
                 editor,
+                Static("", id="edit-error"),
                 Horizontal(
                     Button("Save", id="save"),
                     Button("Cancel", id="cancel"),
@@ -140,6 +148,35 @@ class CurationProposalCard(Vertical):
                 id="edit-box",
             )
         )
+
+    def action_save(self) -> None:
+        if not self._editing:
+            return
+        editor = self.query_one("#editor", TextArea)
+        try:
+            payload = json.loads(editor.text)
+        except json.JSONDecodeError as exc:
+            self.query_one("#edit-error", Static).update(f"Invalid JSON: {exc.msg}")
+            return
+        if not isinstance(payload, dict):
+            self.query_one("#edit-error", Static).update("Payload must be a JSON object.")
+            return
+        self.proposal.payload = payload
+        self.post_message(self.Edited(self.proposal.id, payload))
+        self._restore_body()
+
+    def action_cancel(self) -> None:
+        if self._editing:
+            self._restore_body()
+
+    def _restore_body(self) -> None:
+        self._editing = False
+        self.query_one("#body", Static).update(self._body_markup())
+        self.query_one("#body", Static).display = True
+        try:
+            self.query_one("#edit-box").remove()
+        except Exception:
+            pass
 
     def on_mount(self) -> None:
         self.can_focus = True
