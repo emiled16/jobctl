@@ -202,10 +202,28 @@ class ChatView(Screen):
 
         user_message = Message(role="user", content=text)
         self._persist_session(extra_message=user_message)
+
+        runner = self._resolve_runner()
+        if runner is not None:
+            asyncio.create_task(self._run_agent(runner, text))
+            return
+
         self.bus.publish(AgentDoneEvent(role="user", content=text))
         reply = self._echo_reply(text)
         self._persist_session(extra_message=Message(role="assistant", content=reply))
         self.bus.publish(AgentDoneEvent(role="assistant", content=reply))
+
+    def _resolve_runner(self):
+        app = self.app
+        runner = getattr(app, "agent_runner", None)
+        return runner
+
+    async def _run_agent(self, runner, user_message: str) -> None:
+        try:
+            await runner.submit(user_message)
+        except Exception as exc:  # noqa: BLE001 - surfaced to the log
+            log = self.query_one("#chat-log", RichLog)
+            log.write(Markdown(f"_agent run failed: {exc}_"))
 
     def _echo_reply(self, text: str) -> str:
         return f"echo: {text}"

@@ -125,6 +125,7 @@ class JobctlApp(App):
         self.session_id = uuid.uuid4().hex
         self._palette_commands: list[PaletteCommand] = []
         self.pending_chat_message: str | None = initial_message
+        self._runner = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -170,6 +171,19 @@ class JobctlApp(App):
         self.install_screen(ApplyView(self.conn, self.provider, self.bus), name="apply")
         self.install_screen(CurateView(self.conn, self.job_runner), name="curate")
         self.install_screen(SettingsView(self.config), name="settings")
+
+    @property
+    def agent_runner(self):
+        if self._runner is None:
+            from jobctl.agent.runner import LangGraphRunner
+
+            self._runner = LangGraphRunner(
+                provider=self.provider,
+                conn=self.conn,
+                bus=self.bus,
+                session_id=self.session_id,
+            )
+        return self._runner
 
     def register_command(self, command: PaletteCommand) -> None:
         self._palette_commands.append(command)
