@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Button, DirectoryTree, Input
+from textual.widgets import Button, DirectoryTree, Input, Static
 
 from jobctl.core.events import (
     AsyncEventBus,
     ConfirmationAnsweredEvent,
     ConfirmationRequestedEvent,
 )
+from jobctl.ingestion.resume import SUPPORTED_RESUME_EXTENSIONS
 
 
 class FilePicker(Vertical):
@@ -33,6 +35,10 @@ class FilePicker(Vertical):
     }
     FilePicker Input {
         margin-top: 1;
+    }
+    FilePicker #file-picker-error {
+        color: #f38ba8;
+        min-height: 1;
     }
     FilePicker Horizontal {
         margin-top: 1;
@@ -61,6 +67,7 @@ class FilePicker(Vertical):
         self._start_path = start_path or Path.cwd()
         self._input: Input | None = None
         self._tree: DirectoryTree | None = None
+        self._error_message = ""
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -70,6 +77,7 @@ class FilePicker(Vertical):
                 id="file-picker-input",
                 value=str(self._start_path),
             ),
+            Static("", id="file-picker-error"),
             Horizontal(
                 Button("Select", id="file-picker-select", variant="success"),
                 Button("Cancel", id="file-picker-cancel", variant="error"),
@@ -93,9 +101,18 @@ class FilePicker(Vertical):
 
     def _submit_selection(self) -> None:
         path = self._current_path()
+        if self.request.kind == "file_pick_resume":
+            error = self._validate_resume_path(path)
+            if error is not None:
+                self._show_error(error)
+                return
+
         payload = {"path": str(path) if path else ""}
         if path is not None:
             self.post_message(self.FileSelected(self, path))
+        if self.request.kind == "file_pick_resume" and path is not None:
+            if not self._submit_resume_workflow(path):
+                return
         self.bus.publish(
             ConfirmationAnsweredEvent(
                 confirm_id=self.request.confirm_id,
@@ -112,6 +129,33 @@ class FilePicker(Vertical):
         if not text:
             return None
         return Path(text).expanduser()
+
+    def _validate_resume_path(self, path: Path | None) -> str | None:
+        if path is None:
+            return "Choose a resume file path before continuing."
+        if not path.exists():
+            return f"No file exists at {path}."
+        if path.is_dir():
+            return "Choose a resume file, not a directory."
+        if path.suffix.lower() not in SUPPORTED_RESUME_EXTENSIONS:
+            supported = ", ".join(sorted(SUPPORTED_RESUME_EXTENSIONS))
+            return f"Unsupported resume format. Use one of: {supported}."
+        return None
+
+    def _show_error(self, message: str) -> None:
+        self._error_message = message
+        self.query_one("#file-picker-error", Static).update(message)
+
+    def _submit_resume_workflow(self, path: Path) -> bool:
+        runner = getattr(self.app, "agent_runner", None)
+        if runner is None or not hasattr(runner, "submit_workflow"):
+            self._show_error("Resume ingestion requires an agent runner.")
+            return False
+        from jobctl.agent.state import make_workflow_request
+
+        request = make_workflow_request("resume_ingest", {"path": str(path)})
+        asyncio.create_task(runner.submit_workflow(request))
+        return True
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "file-picker-select":

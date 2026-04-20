@@ -33,6 +33,8 @@ class UnsupportedFormatError(ValueError):
     """Raised when a resume file extension is not supported."""
 
 
+SUPPORTED_RESUME_EXTENSIONS = frozenset({".txt", ".md", ".pdf", ".docx"})
+
 console = Console()
 
 
