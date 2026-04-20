@@ -26,7 +26,7 @@ Reference plan: `plans/plan_v3.0.md`
 
 - [x] T15: Add explicit background job lifecycle events with labels and phases
 - [x] T16: Implement a reusable `SpinnerStatus` widget for active jobs
-- [ ] T17: Upgrade `ProgressPanel` into a useful background jobs dashboard
+- [x] T17: Upgrade `ProgressPanel` into a useful background jobs dashboard
 - [ ] T18: Mark user-waiting jobs distinctly in spinner and sidebar
 - [ ] T19: Add tests for spinner and sidebar lifecycle behavior
 
