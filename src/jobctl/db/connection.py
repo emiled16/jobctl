@@ -123,7 +123,121 @@ def _migration_002_create_tracker_tables(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_003_create_ingestion_tables(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE ingestion_jobs (
+            id TEXT PRIMARY KEY,
+            source_type TEXT NOT NULL,
+            source_key TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'queued',
+            cursor TEXT,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            completed_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX idx_ingestion_jobs_source ON ingestion_jobs (source_type, source_key)"
+    )
+    conn.execute("CREATE INDEX idx_ingestion_jobs_state ON ingestion_jobs (state)")
+    conn.execute(
+        """
+        CREATE TABLE ingested_items (
+            id TEXT PRIMARY KEY,
+            job_id TEXT NOT NULL REFERENCES ingestion_jobs(id) ON DELETE CASCADE,
+            external_id TEXT NOT NULL,
+            external_updated_at TEXT,
+            node_id TEXT,
+            status TEXT NOT NULL DEFAULT 'done',
+            error TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX idx_ingested_items_job ON ingested_items (job_id)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX idx_ingested_items_external "
+        "ON ingested_items (job_id, external_id)"
+    )
+
+
+def _migration_004_create_node_sources(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE node_sources (
+            id TEXT PRIMARY KEY,
+            node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+            source_type TEXT NOT NULL,
+            source_ref TEXT,
+            confidence REAL,
+            source_quote TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX idx_node_sources_node ON node_sources (node_id)")
+    conn.execute(
+        "CREATE INDEX idx_node_sources_type ON node_sources (source_type)"
+    )
+
+
+def _migration_005_create_agent_sessions(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE agent_sessions (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            state_json TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _migration_006_create_curation_proposals(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE curation_proposals (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            decided_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX idx_curation_proposals_status ON curation_proposals (status)"
+    )
+    conn.execute(
+        "CREATE INDEX idx_curation_proposals_kind ON curation_proposals (kind)"
+    )
+
+
+def _migration_007_create_embedding_meta(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE embedding_meta (
+            node_id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+            embedding_model TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+
 MIGRATIONS: list[Migration] = [
     ("001_create_graph_tables", _migration_001_create_graph_tables),
     ("002_create_tracker_tables", _migration_002_create_tracker_tables),
+    ("003_create_ingestion_tables", _migration_003_create_ingestion_tables),
+    ("004_create_node_sources", _migration_004_create_node_sources),
+    ("005_create_agent_sessions", _migration_005_create_agent_sessions),
+    ("006_create_curation_proposals", _migration_006_create_curation_proposals),
+    ("007_create_embedding_meta", _migration_007_create_embedding_meta),
 ]
