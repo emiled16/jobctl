@@ -125,7 +125,7 @@ def start_apply(
             if db_path is not None:
                 worker_conn.close()
 
-    runner.submit(job_id, _do_apply, source="apply")
+    runner.submit(job_id, _do_apply, source="apply", label="Apply workflow")
     return job_id
 
 

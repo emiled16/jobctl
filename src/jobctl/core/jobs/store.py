@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-JOB_STATES = ("queued", "running", "failed", "done")
+JOB_STATES = ("queued", "running", "waiting_for_user", "failed", "done", "cancelled")
 
 
 @dataclass(frozen=True)
@@ -134,7 +134,7 @@ class BackgroundJobStore:
         if state is not None:
             sets.append("state = ?")
             values.append(state)
-            if state == "done" or state == "failed":
+            if state in {"done", "failed", "cancelled"}:
                 sets.append("completed_at = ?")
                 values.append(_utcnow())
         if cursor is not None:

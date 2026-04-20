@@ -90,7 +90,7 @@ def start_resume_ingest(
             if db_path is not None:
                 worker_conn.close()
 
-    runner.submit(job_id, _do_ingest, source="resume")
+    runner.submit(job_id, _do_ingest, source="resume", label=f"Resume ingest: {resume_path.name}")
     return job_id
 
 
@@ -155,7 +155,7 @@ def start_github_ingest(
             if db_path is not None:
                 worker_conn.close()
 
-    runner.submit(job_id, _do_ingest, source="github")
+    runner.submit(job_id, _do_ingest, source="github", label="GitHub ingest")
     return job_id
 
 
