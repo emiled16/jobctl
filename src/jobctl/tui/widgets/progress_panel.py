@@ -14,6 +14,7 @@ from jobctl.core.events import (
     IngestDoneEvent,
     IngestErrorEvent,
     IngestProgressEvent,
+    JobLifecycleEvent,
     JobctlEvent,
 )
 
@@ -21,7 +22,9 @@ from jobctl.core.events import (
 @dataclass
 class JobEntry:
     key: str
+    kind: str
     label: str
+    phase: str = "running"
     current: int = 0
     total: int = 0
     message: str = ""
@@ -57,7 +60,8 @@ class _JobCard(Vertical):
         self.entry = entry
 
     def compose(self):
-        yield Label(self.entry.label, classes="-title")
+        yield Label(self.entry.label, classes="-title", id="title")
+        yield Label(self._phase_text(), id="phase")
         yield ProgressBar(
             total=max(self.entry.total or 1, 1),
             show_eta=False,
@@ -71,7 +75,9 @@ class _JobCard(Vertical):
         bar = self.query_one("#bar", ProgressBar)
         bar.total = max(self.entry.total or 1, 1)
         bar.progress = self.entry.current
+        self.query_one("#title", Label).update(self.entry.label)
         self.query_one("#msg", Label).update(self.entry.message or "")
+        self.query_one("#phase", Label).update(self._phase_text())
         status = self.query_one("#status", Label)
         status.update(self._status_text())
         status.remove_class("-status-done")
@@ -84,11 +90,19 @@ class _JobCard(Vertical):
     def _status_text(self) -> str:
         now = self.entry.completed_at or time.monotonic()
         elapsed = int(now - self.entry.started_at)
+        progress = ""
+        if self.entry.total:
+            progress = f" {self.entry.current}/{self.entry.total}"
         if self.entry.state == "done":
-            return f"done ({elapsed}s)"
+            return f"done{progress} ({elapsed}s)"
         if self.entry.state == "error":
-            return f"error ({elapsed}s)"
-        return f"running ({elapsed}s)"
+            return f"error{progress} ({elapsed}s)"
+        if self.entry.state == "waiting_for_user":
+            return f"waiting for input{progress} ({elapsed}s)"
+        return f"running{progress} ({elapsed}s)"
+
+    def _phase_text(self) -> str:
+        return f"{self.entry.kind} / {self.entry.phase.replace('_', ' ')}"
 
 
 class ProgressPanel(Vertical):
@@ -135,6 +149,8 @@ class ProgressPanel(Vertical):
                 logging.getLogger(__name__).exception("ProgressPanel failed to render event")
 
     def _key_for(self, event: JobctlEvent) -> str | None:
+        if isinstance(event, JobLifecycleEvent):
+            return event.job_id
         if isinstance(event, (IngestProgressEvent, IngestDoneEvent, IngestErrorEvent)):
             return event.job_id or f"ingest:{event.source}"
         if isinstance(event, ApplyProgressEvent):
@@ -142,6 +158,8 @@ class ProgressPanel(Vertical):
         return None
 
     def _label_for(self, event: JobctlEvent) -> str:
+        if isinstance(event, JobLifecycleEvent):
+            return event.label
         if isinstance(event, (IngestProgressEvent, IngestDoneEvent, IngestErrorEvent)):
             return f"Ingest: {event.source}"
         if isinstance(event, ApplyProgressEvent):
@@ -155,34 +173,55 @@ class ProgressPanel(Vertical):
 
         entry = self._entries.get(key)
         if entry is None:
-            entry = JobEntry(key=key, label=self._label_for(event))
+            entry = JobEntry(key=key, kind=self._kind_for(event), label=self._label_for(event))
             self._entries[key] = entry
             self._mount_card(entry)
 
-        if isinstance(event, IngestProgressEvent):
+        if isinstance(event, JobLifecycleEvent):
+            entry.kind = event.kind
+            entry.label = event.label
+            entry.phase = event.phase
+            entry.message = event.message or entry.message
+            if event.phase in {"queued", "running"}:
+                entry.state = "running"
+            elif event.phase == "waiting_for_user":
+                entry.state = "waiting_for_user"
+            elif event.phase == "done":
+                entry.state = "done"
+                entry.completed_at = time.monotonic()
+            elif event.phase in {"error", "cancelled"}:
+                entry.state = "error"
+                entry.completed_at = time.monotonic()
+        elif isinstance(event, IngestProgressEvent):
             entry.current = event.current
             entry.total = max(event.total, 1)
             entry.message = event.message or entry.message
+            entry.phase = "running"
             entry.state = "running"
         elif isinstance(event, IngestDoneEvent):
             entry.current = entry.total or entry.current
             entry.total = entry.total or max(event.facts_added, 1)
             entry.message = f"done ({event.facts_added} facts)"
+            entry.phase = "done"
             entry.state = "done"
             entry.completed_at = time.monotonic()
         elif isinstance(event, IngestErrorEvent):
             entry.message = event.error
+            entry.phase = "error"
             entry.state = "error"
             entry.completed_at = time.monotonic()
         elif isinstance(event, ApplyProgressEvent):
             entry.message = event.message or event.step
             if event.step == "done":
+                entry.phase = "done"
                 entry.state = "done"
                 entry.completed_at = time.monotonic()
             elif event.step == "error":
+                entry.phase = "error"
                 entry.state = "error"
                 entry.completed_at = time.monotonic()
             else:
+                entry.phase = "running"
                 entry.state = "running"
 
         self._refresh_card(entry)
@@ -206,7 +245,7 @@ class ProgressPanel(Vertical):
         card.refresh_entry()
 
     def _recompute_active(self) -> None:
-        has_active = any(e.state == "running" for e in self._entries.values())
+        has_active = any(e.state in {"running", "waiting_for_user"} for e in self._entries.values())
         if has_active == self._has_active:
             return
         self._has_active = has_active
@@ -223,6 +262,15 @@ class ProgressPanel(Vertical):
         if not has_active and not any(e.state == "running" for e in self._entries.values()):
             # Keep sidebar open briefly but allow user to collapse.
             pass
+
+    def _kind_for(self, event: JobctlEvent) -> str:
+        if isinstance(event, JobLifecycleEvent):
+            return event.kind
+        if isinstance(event, (IngestProgressEvent, IngestDoneEvent, IngestErrorEvent)):
+            return "ingest"
+        if isinstance(event, ApplyProgressEvent):
+            return "apply"
+        return "job"
 
 
 __all__ = ["ProgressPanel", "JobEntry"]
