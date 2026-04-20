@@ -56,7 +56,7 @@ def test_save_and_review_cover_letter_continue_writes_yaml(
         make_cover_letter(), tmp_path
     )
 
-    assert output_path == tmp_path / "cover-letter.yaml"
+    assert output_path == tmp_path / "artifacts" / "drafts" / "cover-letter.yaml"
     data = yaml.safe_load(output_path.read_text(encoding="utf-8"))
     assert data["company"] == "Acme"
 

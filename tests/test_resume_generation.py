@@ -62,7 +62,7 @@ def test_save_and_review_continue_writes_resume_yaml(
 
     output_path = resume_generation.save_and_review(make_resume(), tmp_path)
 
-    assert output_path == tmp_path / "resume.yaml"
+    assert output_path == tmp_path / "artifacts" / "drafts" / "resume.yaml"
     data = yaml.safe_load(output_path.read_text(encoding="utf-8"))
     assert data["contact"]["name"] == "Test User"
     assert data["experience"][0]["bullets"] == ["Built Python systems"]
@@ -98,7 +98,7 @@ def test_save_and_review_edit_revalidates_written_yaml(
 
     output_path = resume_generation.save_and_review(make_resume(), tmp_path)
 
-    assert output_path == tmp_path / "resume.yaml"
+    assert output_path == tmp_path / "artifacts" / "drafts" / "resume.yaml"
     data = yaml.safe_load(output_path.read_text(encoding="utf-8"))
     assert data["contact"]["name"] == "Edited User"
 

@@ -56,7 +56,9 @@ def test_init_resume_ingestion_apply_flow(
             monkeypatch.setattr(
                 apply_pipeline,
                 "save_and_review",
-                lambda _resume, output_dir: write_file(output_dir / "resume.yaml"),
+                lambda _resume, output_dir: write_file(
+                    output_dir / "artifacts" / "drafts" / "resume.yaml"
+                ),
             )
             monkeypatch.setattr(
                 apply_pipeline, "generate_cover_letter_yaml", lambda *_args: object()
@@ -64,7 +66,9 @@ def test_init_resume_ingestion_apply_flow(
             monkeypatch.setattr(
                 apply_pipeline,
                 "save_and_review_cover_letter",
-                lambda _cover, output_dir: write_file(output_dir / "cover-letter.yaml"),
+                lambda _cover, output_dir: write_file(
+                    output_dir / "artifacts" / "drafts" / "cover-letter.yaml"
+                ),
             )
             monkeypatch.setattr(
                 apply_pipeline,

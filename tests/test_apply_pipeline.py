@@ -45,13 +45,17 @@ def test_run_apply_creates_materials_ready_tracker_entry(
     monkeypatch.setattr(
         apply_pipeline,
         "save_and_review",
-        lambda _resume, output_dir: _write_file(output_dir / "resume.yaml"),
+        lambda _resume, output_dir: _write_file(
+            output_dir / "artifacts" / "drafts" / "resume.yaml"
+        ),
     )
     monkeypatch.setattr(apply_pipeline, "generate_cover_letter_yaml", lambda *_args: make_cover())
     monkeypatch.setattr(
         apply_pipeline,
         "save_and_review_cover_letter",
-        lambda _cover, output_dir: _write_file(output_dir / "cover-letter.yaml"),
+        lambda _cover, output_dir: _write_file(
+            output_dir / "artifacts" / "drafts" / "cover-letter.yaml"
+        ),
     )
     monkeypatch.setattr(
         apply_pipeline,
@@ -63,8 +67,10 @@ def test_run_apply_creates_materials_ready_tracker_entry(
 
     application = get_application(conn, app_id)
     assert application["status"] == "materials_ready"
-    assert application["resume_pdf_path"].endswith("resume.pdf")
-    assert application["cover_letter_pdf_path"].endswith("cover-letter.pdf")
+    assert application["resume_yaml_path"].endswith("artifacts/drafts/resume.yaml")
+    assert application["resume_pdf_path"].endswith("artifacts/final/resume.pdf")
+    assert application["cover_letter_yaml_path"].endswith("artifacts/drafts/cover-letter.yaml")
+    assert application["cover_letter_pdf_path"].endswith("artifacts/final/cover-letter.pdf")
 
 
 def test_run_apply_can_skip_material_generation(

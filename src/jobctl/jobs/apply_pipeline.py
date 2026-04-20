@@ -48,7 +48,11 @@ def run_apply(conn: sqlite3.Connection, url_or_text: str, llm_client: Any, confi
     resume_yaml_path = _generate_reviewed_resume(
         jd, relevant_experience, evaluation, llm_client, output_dir
     )
-    resume_pdf_path = render_pdf(resume_yaml_path, "resume.html", output_pdf_path(resume_yaml_path))
+    resume_pdf_path = render_pdf(
+        resume_yaml_path,
+        getattr(config, "default_template", None),
+        output_pdf_path(resume_yaml_path),
+    )
 
     cover_letter_yaml_path: Path | None = None
     cover_letter_pdf_path: Path | None = None

@@ -156,18 +156,26 @@ def _resolve_repositories(
     if not username_or_urls:
         return []
 
-    explicit_repos = [
-        _parse_repo_url(value) for value in username_or_urls if _looks_like_url(value)
-    ]
-    if explicit_repos:
-        return explicit_repos
+    selected_repos: list[tuple[str, str]] = []
+    usernames: list[str] = []
+    for value in username_or_urls:
+        if _looks_like_url(value):
+            parsed_url = _parse_github_url(value)
+            if isinstance(parsed_url, tuple):
+                selected_repos.append(parsed_url)
+            else:
+                usernames.append(parsed_url)
+        else:
+            usernames.append(value)
 
-    username = username_or_urls[0]
-    repos = fetcher.get_user_repos(username)
-    if not interactive:
-        return [(username, repo["name"]) for repo in repos]
+    for username in usernames:
+        repos = fetcher.get_user_repos(username)
+        if interactive:
+            selected_repos.extend(_prompt_for_repos(username, repos))
+        else:
+            selected_repos.extend((username, repo["name"]) for repo in repos)
 
-    return _prompt_for_repos(username, repos)
+    return selected_repos
 
 
 def _prompt_for_repos(username: str, repos: list[dict]) -> list[tuple[str, str]]:
@@ -191,10 +199,19 @@ def _prompt_for_repos(username: str, repos: list[dict]) -> list[tuple[str, str]]
 
 
 def _parse_repo_url(url: str) -> tuple[str, str]:
+    parsed_url = _parse_github_url(url)
+    if not isinstance(parsed_url, tuple):
+        raise ValueError(f"Invalid GitHub repository URL: {url}")
+    return parsed_url
+
+
+def _parse_github_url(url: str) -> str | tuple[str, str]:
     parsed = urlparse(url)
     path_parts = [part for part in parsed.path.strip("/").split("/") if part]
-    if parsed.netloc.lower() != "github.com" or len(path_parts) < 2:
-        raise ValueError(f"Invalid GitHub repository URL: {url}")
+    if parsed.netloc.lower().removeprefix("www.") != "github.com" or not path_parts:
+        raise ValueError(f"Invalid GitHub URL: {url}")
+    if len(path_parts) == 1:
+        return path_parts[0]
     return path_parts[0], path_parts[1].removesuffix(".git")
 
 

@@ -65,6 +65,8 @@ This creates:
 ├── config.yaml
 ├── exports/
 └── templates/
+    ├── resume/
+    └── cover-letters/
 ```
 
 View config:
@@ -102,7 +104,7 @@ jobctl apply https://example.com/jobs/senior-engineer
 Render a generated YAML file or an export directory:
 
 ```bash
-jobctl render .jobctl/exports/2026-04-16-acme-senior-engineer/resume.yaml
+jobctl render .jobctl/exports/2026-04-16-acme-senior-engineer/artifacts/drafts/resume.yaml
 jobctl render .jobctl/exports/2026-04-16-acme-senior-engineer
 ```
 
@@ -186,8 +188,10 @@ Project data is local to each initialized directory:
 ```text
 .jobctl/config.yaml
 .jobctl/jobctl.db
-.jobctl/exports/
-.jobctl/templates/
+.jobctl/exports/<application>/artifacts/drafts/
+.jobctl/exports/<application>/artifacts/final/
+.jobctl/templates/resume/
+.jobctl/templates/cover-letters/
 ```
 
 The `.jobctl/` directory is ignored by git.

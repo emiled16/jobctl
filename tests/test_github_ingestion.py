@@ -40,6 +40,7 @@ class FakeLLMClient:
 class FakeFetcher:
     def __init__(self) -> None:
         self.details_requested: list[tuple[str, str]] = []
+        self.usernames_requested: list[str] = []
 
     def get_repo_detail(self, owner: str, repo: str) -> dict:
         self.details_requested.append((owner, repo))
@@ -55,6 +56,7 @@ class FakeFetcher:
         }
 
     def get_user_repos(self, username: str) -> list[dict]:
+        self.usernames_requested.append(username)
         return [{"name": "repo-a"}, {"name": "repo-b"}]
 
 
@@ -153,3 +155,44 @@ def test_ingest_github_username_uses_all_repos_when_noninteractive(
 
     assert persisted_count == 2
     assert fetcher.details_requested == [("acme", "repo-a"), ("acme", "repo-b")]
+    assert fetcher.usernames_requested == ["acme"]
+
+
+def test_ingest_github_profile_url_uses_all_repos_when_noninteractive(
+    conn: sqlite3.Connection,
+) -> None:
+    fetcher = FakeFetcher()
+    llm_client = FakeLLMClient()
+
+    persisted_count = ingest_github(
+        conn,
+        ["https://github.com/acme"],
+        llm_client,
+        interactive=False,
+        fetcher=fetcher,
+    )
+
+    assert persisted_count == 2
+    assert fetcher.details_requested == [("acme", "repo-a"), ("acme", "repo-b")]
+    assert fetcher.usernames_requested == ["acme"]
+
+
+def test_ingest_github_mixes_profile_and_repo_urls(conn: sqlite3.Connection) -> None:
+    fetcher = FakeFetcher()
+    llm_client = FakeLLMClient()
+
+    persisted_count = ingest_github(
+        conn,
+        ["https://github.com/acme", "https://github.com/other/repo.git"],
+        llm_client,
+        interactive=False,
+        fetcher=fetcher,
+    )
+
+    assert persisted_count == 3
+    assert fetcher.details_requested == [
+        ("other", "repo"),
+        ("acme", "repo-a"),
+        ("acme", "repo-b"),
+    ]
+    assert fetcher.usernames_requested == ["acme"]

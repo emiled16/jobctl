@@ -4,6 +4,7 @@ import json
 import subprocess
 import tempfile
 from collections.abc import Callable, Iterator
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -106,6 +107,11 @@ class LLMClient:
                 check=True,
             )
             return output_path.read_text(encoding="utf-8")
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            details = stderr or stdout or f"exit status {exc.returncode}"
+            raise RuntimeError(f"Codex LLM call failed: {details}") from exc
         finally:
             output_path.unlink(missing_ok=True)
 
@@ -198,8 +204,62 @@ def _messages_to_prompt(messages: list[Message], temperature: float) -> str:
 def _write_json_schema(response_format: type[BaseModel]) -> Path:
     with tempfile.NamedTemporaryFile("w", suffix=".schema.json", delete=False) as schema_file:
         schema_path = Path(schema_file.name)
-        json.dump(response_format.model_json_schema(), schema_file)
+        json.dump(_codex_output_schema(response_format), schema_file)
     return schema_path
+
+
+def _codex_output_schema(response_format: type[BaseModel]) -> dict[str, Any]:
+    schema = deepcopy(response_format.model_json_schema())
+    _replace_properties_map(schema)
+    _make_objects_strict(schema)
+    return schema
+
+
+def _replace_properties_map(schema: dict[str, Any]) -> None:
+    extracted_fact = schema.get("$defs", {}).get("ExtractedFact")
+    if not isinstance(extracted_fact, dict):
+        return
+
+    fact_properties = extracted_fact.get("properties")
+    if not isinstance(fact_properties, dict) or "properties" not in fact_properties:
+        return
+
+    fact_properties["properties"] = {
+        "title": "Properties",
+        "description": "Structured fact metadata as key/value pairs.",
+        "type": "array",
+        "items": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "key": {"type": "string"},
+                "value": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "number"},
+                        {"type": "boolean"},
+                        {"type": "null"},
+                        {"type": "array", "items": {"type": "string"}},
+                    ]
+                },
+            },
+            "required": ["key", "value"],
+        },
+    }
+
+
+def _make_objects_strict(schema: Any) -> None:
+    if isinstance(schema, dict):
+        if schema.get("type") == "object":
+            properties = schema.get("properties")
+            if isinstance(properties, dict):
+                schema["additionalProperties"] = False
+                schema["required"] = list(properties)
+        for value in schema.values():
+            _make_objects_strict(value)
+    elif isinstance(schema, list):
+        for item in schema:
+            _make_objects_strict(item)
 
 
 # OpenAI provider kept for later reuse.

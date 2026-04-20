@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ contact.name }} Resume</title>
+  <style>
+    @page { size: Letter; margin: 0.45in; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 9.8pt; line-height: 1.25; }
+    h1 { font-size: 17pt; margin: 0; }
+    .contact { margin: 2px 0 9px; color: #333; }
+    h2 { font-size: 10.5pt; text-transform: uppercase; border-bottom: 1px solid #333; margin: 9px 0 4px; }
+    h3 { font-size: 10pt; margin: 6px 0 1px; }
+    .meta { color: #333; font-style: italic; }
+    ul { margin: 3px 0 0 16px; padding: 0; }
+    li { margin-bottom: 2px; }
+    .skills { columns: 2; column-gap: 18px; }
+    .section { break-inside: avoid; }
+    p { margin: 3px 0; }
+  </style>
+</head>
+<body>
+  <h1>{{ contact.name }}</h1>
+  <div class="contact">
+    {{ contact.email }}
+    {% if contact.phone %} | {{ contact.phone }}{% endif %}
+    {% if contact.location %} | {{ contact.location }}{% endif %}
+    {% if contact.linkedin %} | {{ contact.linkedin }}{% endif %}
+    {% if contact.github %} | {{ contact.github }}{% endif %}
+    {% if contact.website %} | {{ contact.website }}{% endif %}
+  </div>
+
+  {% for section in sections %}
+    {% if section.kind == "summary" %}
+      <section class="section">
+        <h2>{{ section.title }}</h2>
+        <p>{{ section.content }}</p>
+      </section>
+    {% elif section.kind == "experience" %}
+      <section>
+        <h2>{{ section.title }}</h2>
+        {% for entry in section.content %}
+          <div class="section">
+            <h3>{{ entry.title }}, {{ entry.company }}</h3>
+            <div class="meta">{{ entry.start_date }}{% if entry.end_date %} - {{ entry.end_date }}{% else %} - Present{% endif %}</div>
+            <ul>
+              {% for bullet in entry.bullets %}
+                <li>{{ bullet }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endfor %}
+      </section>
+    {% elif section.kind == "skills" %}
+      <section class="section">
+        <h2>{{ section.title }}</h2>
+        <div class="skills">
+          {% for category, values in section.content.items() %}
+            <p><strong>{{ category }}:</strong> {{ values | join(", ") }}</p>
+          {% endfor %}
+        </div>
+      </section>
+    {% elif section.kind == "education" %}
+      <section class="section">
+        <h2>{{ section.title }}</h2>
+        {% for entry in section.content %}
+          <p><strong>{{ entry.degree }}</strong>{% if entry.field %}, {{ entry.field }}{% endif %}, {{ entry.institution }}{% if entry.end_date %}, {{ entry.end_date }}{% endif %}</p>
+          {% if entry.details %}
+            <ul>{% for detail in entry.details %}<li>{{ detail }}</li>{% endfor %}</ul>
+          {% endif %}
+        {% endfor %}
+      </section>
+    {% elif section.kind == "certifications" %}
+      <section class="section">
+        <h2>{{ section.title }}</h2>
+        <p>{{ section.content | join(", ") }}</p>
+      </section>
+    {% elif section.kind == "projects" %}
+      <section class="section">
+        <h2>{{ section.title }}</h2>
+        {% for project in section.content %}
+          <p><strong>{{ project.name }}</strong>{% if project.url %} - {{ project.url }}{% endif %}: {{ project.description }}</p>
+          {% if project.bullets %}
+            <ul>{% for bullet in project.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
+          {% endif %}
+        {% endfor %}
+      </section>
+    {% elif section.kind == "publications" %}
+      <section class="section">
+        <h2>{{ section.title }}</h2>
+        {% for publication in section.content %}
+          <p><strong>{{ publication.title }}</strong>{% if publication.publisher %}, {{ publication.publisher }}{% endif %}{% if publication.date %}, {{ publication.date }}{% endif %}{% if publication.url %} - {{ publication.url }}{% endif %}{% if publication.description %}: {{ publication.description }}{% endif %}</p>
+        {% endfor %}
+      </section>
+    {% endif %}
+  {% endfor %}
+</body>
+</html>

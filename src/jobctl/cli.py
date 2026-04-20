@@ -44,7 +44,8 @@ def init_command() -> None:
     if jobctl_dir.exists():
         raise click.ClickException(f"{CONFIG_DIR_NAME}/ already exists in {project_root}")
 
-    (jobctl_dir / "templates").mkdir(parents=True)
+    (jobctl_dir / "templates" / "resume").mkdir(parents=True)
+    (jobctl_dir / "templates" / "cover-letters").mkdir(parents=True)
     (jobctl_dir / "exports").mkdir()
     _copy_bundled_templates(jobctl_dir / "templates")
     save_config(project_root, default_config())
@@ -73,6 +74,33 @@ def onboard() -> None:
             run_onboarding(conn, llm_client, config)
         finally:
             conn.close()
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@main.command()
+def agent() -> None:
+    """Start the interactive agent shell."""
+    try:
+        project_root = find_project_root(Path.cwd())
+        config = load_config(project_root)
+        from jobctl.conversation.agent import run_agent_shell
+        from jobctl.db.connection import get_connection
+        from jobctl.llm.client import LLMClient
+
+        db_path = project_root / CONFIG_DIR_NAME / "jobctl.db"
+        llm_client = LLMClient(
+            api_key=config.openai_api_key,
+            model=config.llm_model,
+            cwd=project_root,
+        )
+        conn = get_connection(db_path)
+        try:
+            run_agent_shell(conn, llm_client, config, project_root)
+        finally:
+            conn.close()
+    except KeyboardInterrupt:
+        click.echo("\nAgent session interrupted.")
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -150,21 +178,97 @@ def profile() -> None:
 
 
 @main.command()
+@click.option("--enable", "enable_sections", multiple=True, help="Resume section to include.")
+@click.option("--disable", "disable_sections", multiple=True, help="Resume section to omit.")
+@click.option("--template", "template_name", help="Template filename to use.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path), help="Output PDF path.")
+@click.option("--validate-only", is_flag=True, help="Validate YAML without rendering a PDF.")
+@click.option("--interactive", is_flag=True, help="Open the resume section picker TUI.")
+@click.option("--tui", "use_tui", is_flag=True, help="Open the resume section picker TUI.")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
-def render(path: Path) -> None:
+def render(
+    path: Path,
+    enable_sections: tuple[str, ...],
+    disable_sections: tuple[str, ...],
+    template_name: str | None,
+    output_path: Path | None,
+    validate_only: bool,
+    interactive: bool,
+    use_tui: bool,
+) -> None:
     """Render generated YAML materials to output files."""
     try:
-        from jobctl.generation.renderer import infer_template_name, output_pdf_path, render_pdf
+        from jobctl.generation.renderer import (
+            RESUME_SECTION_DEFAULTS,
+            load_material,
+            output_pdf_path,
+            render_pdf,
+            validate_material,
+        )
 
-        yaml_paths = sorted(path.glob("*.yaml")) if path.is_dir() else [path]
+        yaml_paths = sorted(path.rglob("*.yaml")) if path.is_dir() else [path]
         if not yaml_paths:
             raise click.ClickException(f"No YAML files found in {path}")
+        if output_path is not None and len(yaml_paths) > 1:
+            raise click.ClickException("--output can only be used with a single YAML file.")
+        if (interactive or use_tui) and len(yaml_paths) > 1:
+            raise click.ClickException("The render TUI can only be used with a single YAML file.")
+
+        _validate_section_names(enable_sections, RESUME_SECTION_DEFAULTS)
+        _validate_section_names(disable_sections, RESUME_SECTION_DEFAULTS)
+
+        if interactive or use_tui:
+            from jobctl.tui.materials_render import run_material_render_tui
+
+            result = run_material_render_tui(
+                yaml_paths[0],
+                template_name=template_name,
+                output_path=output_path,
+            )
+            if result and result.rendered and result.output_path:
+                click.echo(str(result.output_path))
+            return
+
         for yaml_path in yaml_paths:
-            template_name = infer_template_name(yaml_path)
-            pdf_path = render_pdf(yaml_path, template_name, output_pdf_path(yaml_path))
+            enabled = set(enable_sections)
+            disabled = set(disable_sections)
+            load_material(yaml_path)
+
+            diagnostics = validate_material(
+                yaml_path,
+                enable_sections=enabled,
+                disable_sections=disabled,
+            )
+            if diagnostics:
+                for diagnostic in diagnostics:
+                    click.echo(f"Warning: {diagnostic}", err=True)
+            if validate_only:
+                if not diagnostics:
+                    click.echo(f"{yaml_path}: valid")
+                continue
+
+            pdf_path = render_pdf(
+                yaml_path,
+                template_name,
+                output_path or output_pdf_path(yaml_path),
+                enable_sections=enabled,
+                disable_sections=disabled,
+            )
             click.echo(str(pdf_path))
     except Exception as exc:
         raise click.ClickException(f"Failed to render PDF: {exc}") from exc
+
+
+def _validate_section_names(
+    section_names: tuple[str, ...],
+    known_sections: dict[str, tuple[str, int]],
+) -> None:
+    unknown = sorted(set(section_names) - set(known_sections))
+    if unknown:
+        valid = ", ".join(known_sections)
+        raise click.ClickException(
+            f"Unknown resume section(s): {', '.join(unknown)}. Valid sections: {valid}"
+        )
 
 
 @main.command("config")
@@ -220,10 +324,15 @@ def _mask_api_key(api_key: str) -> str:
 
 def _copy_bundled_templates(destination: Path) -> None:
     template_root = resources.files("jobctl").joinpath("templates")
-    for template_name in ("resume.html", "cover-letter.html"):
-        source = template_root.joinpath(template_name)
-        with resources.as_file(source) as source_path:
-            shutil.copyfile(source_path, destination / template_name)
+    for source in template_root.iterdir():
+        if not source.is_dir():
+            continue
+        target_dir = destination / source.name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for template in source.iterdir():
+            if template.name.endswith(".html"):
+                with resources.as_file(template) as source_path:
+                    shutil.copyfile(source_path, target_dir / template.name)
 
 
 def _run_tui(start_screen: str) -> None:

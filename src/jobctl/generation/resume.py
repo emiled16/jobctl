@@ -66,8 +66,9 @@ def generate_resume_yaml(
 
 def save_and_review(resume: ResumeYAML, output_dir: Path) -> Path | None:
     """Write resume YAML and let the user continue, edit, or regenerate."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / "resume.yaml"
+    drafts_dir = output_dir / "artifacts" / "drafts"
+    drafts_dir.mkdir(parents=True, exist_ok=True)
+    output_path = drafts_dir / "resume.yaml"
     _write_resume_yaml(resume, output_path)
 
     console = Console()

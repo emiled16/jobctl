@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
     "openai_api_key": "",
     "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
     "llm_model": "gpt-5.4",
-    "default_template": "resume.html",
+    "default_template": "emile-resume.html",
 }
 
 

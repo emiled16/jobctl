@@ -1,6 +1,6 @@
 """Pydantic schemas for generated application materials."""
 
-from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,21 +37,61 @@ class EducationEntry(BaseModel):
     details: list[str] | None = None
 
 
+class ProjectEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    description: str
+    url: str | None = None
+    bullets: list[str] | None = None
+
+
+class PublicationEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    publisher: str | None = None
+    date: str | None = None
+    url: str | None = None
+    description: str | None = None
+
+
+class ResumeSectionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    title: str | None = None
+    order: int | None = None
+
+
+class ResumeRenderOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    template: str | None = None
+    sections: dict[str, ResumeSectionConfig] = Field(default_factory=dict)
+
+
 class ResumeYAML(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    document_type: Literal["resume"] | None = None
+    schema_version: int | None = None
+    render: ResumeRenderOptions | None = None
     contact: ContactInfo
     summary: str
     experience: list[ExperienceEntry] = Field(default_factory=list)
     skills: dict[str, list[str]] = Field(default_factory=dict)
     education: list[EducationEntry] = Field(default_factory=list)
     certifications: list[str] | None = None
-    projects: list[dict[str, Any]] | None = None
+    projects: list[ProjectEntry] | None = None
+    publications: list[PublicationEntry] | None = None
 
 
 class CoverLetterYAML(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    document_type: Literal["cover_letter"] | Literal["cover-letter"] | None = None
+    schema_version: int | None = None
     recipient: str | None = None
     company: str
     role: str

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ contact.name }} Resume</title>
+  <style>
+    @page { size: A4; margin: 0.30in 0.34in 0.32in; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #111;
+      font-size: 10.15pt;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 18.5pt;
+      line-height: 1;
+      margin: 0 0 5px;
+      font-weight: 700;
+    }
+    .name-link {
+      margin-left: 6px;
+      vertical-align: 2px;
+    }
+    .contact {
+      color: #707070;
+      font-size: 10.3pt;
+      line-height: 1.1;
+    }
+    .contact a {
+      color: #707070;
+      text-decoration: none;
+    }
+    .social-link {
+      display: inline-block;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      margin-left: 5px;
+      vertical-align: 0;
+      text-decoration: none;
+      overflow: hidden;
+    }
+    .social-link.linkedin {
+      background: #0a66c2;
+    }
+    .social-link.github {
+      background: #111;
+    }
+    .social-link svg {
+      display: block;
+      width: 15px;
+      height: 15px;
+    }
+    section {
+      margin-top: 11px;
+    }
+    h2 {
+      font-size: 10.4pt;
+      line-height: 1;
+      text-transform: uppercase;
+      margin: 0 0 6px;
+      padding-bottom: 3px;
+      border-bottom: 1.2px solid #111;
+      font-weight: 700;
+    }
+    p {
+      margin: 0 0 3px;
+    }
+    .entry {
+      break-inside: avoid;
+      margin-bottom: 7px;
+    }
+    .entry-heading {
+      margin: 0 0 2px;
+      font-weight: 400;
+    }
+    .entry-heading strong {
+      font-weight: 700;
+    }
+    .date {
+      font-style: italic;
+      white-space: nowrap;
+    }
+    ul {
+      margin: 0 0 0 15px;
+      padding: 0;
+    }
+    li {
+      margin: 0 0 1.5px;
+      padding-left: 1px;
+    }
+    .summary {
+      text-align: left;
+    }
+    .skill-category {
+      margin-bottom: 2px;
+      break-inside: avoid;
+    }
+    .skill-category strong,
+    .education-degree,
+    .publication-title {
+      font-weight: 700;
+    }
+    .compact-list {
+      margin-top: -1px;
+    }
+    .muted-link {
+      color: #111;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>
+      {{ contact.name }}
+      {% if contact.linkedin %}<a class="social-link linkedin name-link" href="{{ contact.linkedin }}" aria-label="LinkedIn profile"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffffff" d="M5.4 8.7h3.1v9.8H5.4V8.7zM6.95 4.7c1 0 1.75.75 1.75 1.7s-.75 1.7-1.75 1.7S5.2 7.35 5.2 6.4s.75-1.7 1.75-1.7zm3.55 4h3v1.35h.05c.4-.75 1.45-1.6 2.95-1.6 3.15 0 3.75 2.05 3.75 4.75v5.3h-3.1v-4.7c0-1.15-.05-2.6-1.6-2.6-1.6 0-1.85 1.25-1.85 2.5v4.8h-3.2V8.7z"/></svg></a>{% endif %}
+      {% if contact.github %}<a class="social-link github name-link" href="{{ contact.github }}" aria-label="GitHub profile"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffffff" d="M12 3.8c-4.6 0-8.3 3.7-8.3 8.3 0 3.7 2.4 6.8 5.7 7.9.4.1.6-.2.6-.4v-1.5c-2.3.5-2.8-1-2.8-1-.4-.9-.9-1.1-.9-1.1-.8-.5.1-.5.1-.5.8.1 1.3.9 1.3.9.7 1.3 2 1 2.4.8.1-.5.3-1 .5-1.2-1.9-.2-3.8-.9-3.8-4.1 0-.9.3-1.7.9-2.2-.1-.2-.4-1.1.1-2.2 0 0 .7-.2 2.3.9.7-.2 1.4-.3 2.1-.3s1.4.1 2.1.3c1.6-1.1 2.3-.9 2.3-.9.5 1.1.2 2 .1 2.2.5.6.9 1.3.9 2.2 0 3.2-1.9 3.9-3.8 4.1.3.3.6.8.6 1.6v2.3c0 .2.1.5.6.4 3.3-1.1 5.7-4.2 5.7-7.9-.2-4.9-3.9-8.6-8.5-8.6z"/></svg></a>{% endif %}
+    </h1>
+    <div class="contact">
+      E-mail: {{ contact.email }}
+      {% if contact.phone %} | Phone : {{ contact.phone }}{% endif %}
+      {% if contact.website %} | <a href="{{ contact.website }}">{{ contact.website }}</a>{% endif %}
+    </div>
+  </header>
+
+  {% for section in sections %}
+    {% if section.kind == "summary" %}
+      <section>
+        <h2>{{ section.title }}</h2>
+        <p class="summary">{{ section.content }}</p>
+      </section>
+    {% elif section.kind == "experience" %}
+      <section>
+        <h2>Selected Professional Experience</h2>
+        {% for entry in section.content %}
+          <div class="entry">
+            <p class="entry-heading">
+              <strong>{{ entry.title }}</strong> &ndash; <strong>{{ entry.company }}</strong>
+              <span class="date">| {{ entry.start_date }} &ndash; {% if entry.end_date %}{{ entry.end_date }}{% else %}Present{% endif %}</span>
+            </p>
+            <ul>
+              {% for bullet in entry.bullets %}
+                <li>{{ bullet }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endfor %}
+      </section>
+    {% elif section.kind == "projects" %}
+      <section>
+        <h2>Technical Projects</h2>
+        <ul class="compact-list">
+          {% for project in section.content %}
+            <li>
+              {% if project.name %}<strong>{{ project.name }}:</strong> {% endif %}{{ project.description }}{% if project.url %} | <a class="muted-link" href="{{ project.url }}">{{ project.url }}</a>{% endif %}
+              {% if project.bullets %}
+                <ul>{% for bullet in project.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% elif section.kind == "education" %}
+      <section>
+        <h2>{{ section.title }}</h2>
+        {% for entry in section.content %}
+          <div class="entry">
+            <p>
+              <span class="education-degree">{{ entry.degree }}{% if entry.field %} in {{ entry.field }}{% endif %}</span>
+              - {{ entry.institution }}{% if entry.end_date %} | <span class="date">{{ entry.end_date }}</span>{% endif %}
+            </p>
+            {% if entry.details %}
+              <ul>{% for detail in entry.details %}<li>{{ detail }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </section>
+    {% elif section.kind == "publications" %}
+      <section>
+        <h2>{{ section.title }}</h2>
+        <ul class="compact-list">
+          {% for publication in section.content %}
+            <li>
+              <span class="publication-title">{{ publication.title }}</span>{% if publication.publisher %} | {{ publication.publisher }}{% endif %}{% if publication.date %} ({{ publication.date }}){% endif %}{% if publication.url %} | <a class="muted-link" href="{{ publication.url }}">{{ publication.url }}</a>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% elif section.kind == "skills" %}
+      <section>
+        <h2>Tech Stack</h2>
+        {% for category, values in section.content.items() %}
+          <p class="skill-category"><strong>{{ category }}:</strong> {{ values | join(", ") }}</p>
+        {% endfor %}
+      </section>
+    {% elif section.kind == "certifications" %}
+      <section>
+        <h2>{{ section.title }}</h2>
+        <ul class="compact-list">
+          {% for certification in section.content %}
+            <li>{{ certification }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+  {% endfor %}
+</body>
+</html>

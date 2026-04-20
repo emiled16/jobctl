@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ExtractedFact(BaseModel):
@@ -14,6 +14,17 @@ class ExtractedFact(BaseModel):
     related_to: str | None
     properties: dict[str, Any] = Field(default_factory=dict)
     text_representation: str
+
+    @field_validator("properties", mode="before")
+    @classmethod
+    def _properties_from_key_value_pairs(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            converted: dict[str, Any] = {}
+            for item in value:
+                if isinstance(item, dict) and "key" in item and "value" in item:
+                    converted[str(item["key"])] = item["value"]
+            return converted
+        return value
 
 
 class ExtractedProfile(BaseModel):

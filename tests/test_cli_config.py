@@ -17,12 +17,14 @@ def test_init_creates_jobctl_directory_and_default_config(tmp_path: Path) -> Non
         assert isolated_result.exit_code == 0
         assert (isolated_path / ".jobctl" / "config.yaml").is_file()
         assert (isolated_path / ".jobctl" / "templates").is_dir()
+        assert (isolated_path / ".jobctl" / "templates" / "resume").is_dir()
+        assert (isolated_path / ".jobctl" / "templates" / "cover-letters").is_dir()
         assert (isolated_path / ".jobctl" / "exports").is_dir()
         assert load_config(isolated_path) == JobctlConfig(
             openai_api_key="",
             embedding_model="sentence-transformers/all-MiniLM-L6-v2",
             llm_model="gpt-5.4",
-            default_template="resume.html",
+            default_template="emile-resume.html",
         )
 
 
