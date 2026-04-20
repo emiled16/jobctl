@@ -205,7 +205,7 @@ class JobctlApp(App):
                 PaletteCommand(
                     label=f"View: {name.capitalize()}",
                     description=f"Switch to the {name} view",
-                    action=(lambda n=name: self._show_view(n)),
+                    action=(lambda n=name: self.show_view(n)),
                 )
             )
         for slash in ("/ingest resume", "/ingest github", "/curate", "/apply", "/mode"):
