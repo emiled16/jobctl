@@ -12,7 +12,7 @@ Reference plan: `docs/plan-v2.md`
 - [x] T4: Refactor `CodexCLIProvider` from `src/jobctl/llm/client.py` to implement `LLMProvider`
 - [x] T5: Implement `LLMProviderRegistry` in `src/jobctl/llm/registry.py`
 - [x] T6: Refactor `JobctlConfig` to support a nested `llm` provider block
-- [ ] T7: Implement `AsyncEventBus` with typed event dataclasses in `src/jobctl/core/events.py`
+- [x] T7: Implement `AsyncEventBus` with typed event dataclasses in `src/jobctl/core/events.py`
 - [ ] T8: Implement `BackgroundJobRunner` in `src/jobctl/core/jobs/runner.py`
 - [ ] T9: Implement `BackgroundJobStore` CRUD in `src/jobctl/core/jobs/store.py`
 - [ ] T10: Add DB migrations 003–007 for new tables
