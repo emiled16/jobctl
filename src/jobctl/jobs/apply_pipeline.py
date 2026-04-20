@@ -19,6 +19,7 @@ from jobctl.core.events import (
     AsyncEventBus,
     ConfirmationAnsweredEvent,
     ConfirmationRequestedEvent,
+    JobLifecycleEvent,
 )
 from jobctl.generation.cover_letter import (
     generate_cover_letter_yaml,
@@ -50,10 +51,27 @@ def _progress(
     bus.publish(ApplyProgressEvent(step=step, message=message, job_id=job_id))
 
 
-def _bus_confirm(bus: AsyncEventBus, question: str, payload_kind: str) -> bool:
+def _bus_confirm(
+    bus: AsyncEventBus,
+    question: str,
+    payload_kind: str,
+    *,
+    job_id: str | None = None,
+    label: str = "Apply workflow",
+) -> bool:
     confirm_id = uuid.uuid4().hex
     queue = bus.subscribe()
     try:
+        if job_id is not None:
+            bus.publish(
+                JobLifecycleEvent(
+                    job_id=job_id,
+                    kind="apply",
+                    label=label,
+                    phase="waiting_for_user",
+                    message=question,
+                )
+            )
         bus.publish(
             ConfirmationRequestedEvent(question=question, confirm_id=confirm_id, kind=payload_kind)
         )
@@ -67,6 +85,16 @@ def _bus_confirm(bus: AsyncEventBus, question: str, payload_kind: str) -> bool:
                 time.sleep(0.05)
                 continue
             if isinstance(event, ConfirmationAnsweredEvent) and event.confirm_id == confirm_id:
+                if job_id is not None:
+                    bus.publish(
+                        JobLifecycleEvent(
+                            job_id=job_id,
+                            kind="apply",
+                            label=label,
+                            phase="running",
+                            message="Resuming",
+                        )
+                    )
                 return bool(event.answer)
     finally:
         bus.unsubscribe(queue)
@@ -94,11 +122,12 @@ def _confirm(
     *,
     kind: str = "yes_no",
     default: bool = True,
+    job_id: str | None = None,
 ) -> bool:
     if confirm_fn is not None:
         return confirm_fn(question, kind)
     if bus is not None:
-        return _bus_confirm(bus, question, kind)
+        return _bus_confirm(bus, question, kind, job_id=job_id)
     return Confirm.ask(question, default=default)
 
 
@@ -142,7 +171,7 @@ def run_apply(
     )
     _progress(bus, "application_created", f"app_id={app_id}", job_id=job_id)
 
-    if not _confirm(bus, confirm_fn, "Generate tailored materials?"):
+    if not _confirm(bus, confirm_fn, "Generate tailored materials?", job_id=job_id):
         _progress(bus, "done", f"Tracker entry created: {app_id}", job_id=job_id)
         return app_id
 
@@ -161,7 +190,7 @@ def run_apply(
 
     cover_letter_yaml_path: Path | None = None
     cover_letter_pdf_path: Path | None = None
-    if _confirm(bus, confirm_fn, "Generate cover letter?"):
+    if _confirm(bus, confirm_fn, "Generate cover letter?", job_id=job_id):
         _progress(bus, "generate_cover_letter", "Generating cover letter YAML", job_id=job_id)
         cover_letter_yaml_path = _generate_reviewed_cover_letter(
             jd,
