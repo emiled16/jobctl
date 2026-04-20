@@ -16,7 +16,7 @@ Reference plan: `plans/plan_v3.0.md`
 - [x] T7: Define a structured Chat workflow request contract
 - [x] T8: Make `/mode` update persisted `AgentState.mode` through confirmation
 - [x] T9: Add file selection validation before starting resume ingestion
-- [ ] T10: Implement inline GitHub ingest input flow
+- [x] T10: Implement inline GitHub ingest input flow
 - [ ] T11: Implement inline Apply input flow for Chat and palette starts
 - [ ] T12: Wire proactive resume and GitHub prompts into real workflow starts
 - [ ] T13: Convert palette workflow commands from raw slash text into structured UI actions
