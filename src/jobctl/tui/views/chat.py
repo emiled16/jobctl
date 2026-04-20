@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.markdown import Markdown
 from textual import events
@@ -335,11 +335,22 @@ class ChatView(Screen):
             log.write(Markdown(f"_tool call: `{event.name}({pretty_args})`_"))
             return
         if isinstance(event, ConfirmationRequestedEvent):
-            from jobctl.tui.widgets.confirm_card import InlineConfirmCard
-
-            card = InlineConfirmCard(event, bus=self.bus)
             container = self.query_one(Vertical)
-            container.mount(card, before=self.query_one("#chat-input"))
+            widget: Any
+            if event.kind == "file_pick" or event.kind == "file_pick_resume":
+                from jobctl.tui.widgets.file_picker import FilePicker
+
+                widget = FilePicker(event, bus=self.bus)
+            elif event.kind == "multi_select":
+                from jobctl.tui.widgets.multi_select import MultiSelectList
+
+                items = list(event.payload.get("items") or [])
+                widget = MultiSelectList(event, items, bus=self.bus)
+            else:
+                from jobctl.tui.widgets.confirm_card import InlineConfirmCard
+
+                widget = InlineConfirmCard(event, bus=self.bus)
+            container.mount(widget, before=self.query_one("#chat-input"))
             return
 
 
