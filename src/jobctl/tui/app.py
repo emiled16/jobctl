@@ -130,8 +130,12 @@ class JobctlApp(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
         yield Static(self._header_meta(), id="app-header-meta")
+        from jobctl.tui.widgets.progress_panel import ProgressPanel
+
         with Horizontal(id="main-layout"):
-            yield Vertical(id="sidebar")
+            with Vertical(id="sidebar"):
+                yield Label("Background jobs", id="sidebar-title")
+                yield ProgressPanel(self.bus)
         yield Footer()
 
     def _header_meta(self) -> str:
