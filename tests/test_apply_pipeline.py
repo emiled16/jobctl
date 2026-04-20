@@ -1,14 +1,31 @@
 import sqlite3
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
 from jobctl.config import default_config, save_config
+from jobctl.core.events import (
+    AsyncEventBus,
+    ConfirmationAnsweredEvent,
+    ConfirmationRequestedEvent,
+    JobLifecycleEvent,
+)
 from jobctl.db.connection import get_connection
 from jobctl.generation.schemas import CoverLetterYAML, ResumeYAML
 from jobctl.jobs import apply_pipeline
 from jobctl.jobs.tracker import get_application
 from jobctl.llm.schemas import ExtractedJD, FitEvaluation
+
+
+def _next_event(queue, *, timeout: float = 1.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not queue.empty():
+            return queue.get_nowait()
+        time.sleep(0.01)
+    raise AssertionError("timed out waiting for event")
 
 
 @pytest.fixture()
@@ -88,6 +105,34 @@ def test_run_apply_can_skip_material_generation(
     app_id = apply_pipeline.run_apply(conn, "Senior Engineer JD", object(), default_config())
 
     assert get_application(conn, app_id)["status"] == "evaluated"
+
+
+def test_bus_confirm_marks_job_waiting_and_resumes() -> None:
+    bus = AsyncEventBus()
+    queue = bus.subscribe()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            apply_pipeline._bus_confirm,
+            bus,
+            "Generate tailored materials?",
+            "yes_no",
+            job_id="job-1",
+        )
+
+        waiting = _next_event(queue)
+        assert isinstance(waiting, JobLifecycleEvent)
+        assert waiting.phase == "waiting_for_user"
+        request = _next_event(queue)
+        assert isinstance(request, ConfirmationRequestedEvent)
+
+        bus.publish(ConfirmationAnsweredEvent(confirm_id=request.confirm_id, answer=True))
+
+        assert future.result(timeout=2) is True
+        resumed = _next_event(queue)
+        while isinstance(resumed, ConfirmationAnsweredEvent):
+            resumed = _next_event(queue)
+        assert isinstance(resumed, JobLifecycleEvent)
+        assert resumed.phase == "running"
 
 
 def _write_file(path: Path, content: bytes = b"yaml") -> Path:
