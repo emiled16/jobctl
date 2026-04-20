@@ -25,6 +25,7 @@ dependencies = [
     "textual==3.1.0",
     "torch==2.2.2",
     "transformers==4.51.3",
+    "typer==0.12.5",
     "weasyprint==65.1",
 ]
 
