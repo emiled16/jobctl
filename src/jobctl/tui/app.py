@@ -52,38 +52,7 @@ class QuitConfirmScreen(ModalScreen[bool]):
 class JobctlApp(App):
     """Unified jobctl shell: header, view switcher, sidebar, footer."""
 
-    CSS = """
-    Screen {
-        background: #1e1e2e;
-        color: #cdd6f4;
-    }
-    #app-header-meta {
-        dock: top;
-        height: 1;
-        background: #313244;
-        color: #cdd6f4;
-        padding: 0 1;
-    }
-    #main-layout {
-        height: 1fr;
-    }
-    #sidebar {
-        width: 30;
-        display: none;
-        background: #181825;
-        border-left: solid #45475a;
-        padding: 1;
-    }
-    #sidebar.-visible {
-        display: block;
-    }
-    DataTable {
-        height: 1fr;
-    }
-    TextArea {
-        height: 10;
-    }
-    """
+    CSS_PATH = "theme.tcss"
 
     BINDINGS = [
         Binding("ctrl+b", "toggle_sidebar", "Sidebar", show=False),

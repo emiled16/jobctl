@@ -1,0 +1,109 @@
+/* Central Textual theme for jobctl v2 (Catppuccin Mocha inspired). */
+
+$background: #1e1e2e;
+$surface: #313244;
+$surface-alt: #181825;
+$overlay: #45475a;
+$accent: #89b4fa;
+$accent-alt: #b4befe;
+$green: #a6e3a1;
+$red: #f38ba8;
+$yellow: #f9e2af;
+$text: #cdd6f4;
+$subtext: #a6adc8;
+$muted: #6c7086;
+
+Screen {
+    background: $background;
+    color: $text;
+}
+
+Header {
+    background: $surface;
+    color: $text;
+}
+
+Footer {
+    background: $surface;
+    color: $subtext;
+}
+
+#app-header-meta {
+    dock: top;
+    height: 1;
+    background: $surface;
+    color: $text;
+    padding: 0 1;
+}
+
+#main-layout {
+    height: 1fr;
+}
+
+#sidebar {
+    width: 30;
+    display: none;
+    background: $surface-alt;
+    border-left: solid $overlay;
+    padding: 1;
+}
+
+#sidebar.-visible {
+    display: block;
+}
+
+#sidebar-title {
+    color: $accent;
+    text-style: bold;
+}
+
+DataTable {
+    height: 1fr;
+    background: $background;
+}
+
+TextArea {
+    height: 10;
+    background: $surface-alt;
+    color: $text;
+}
+
+Button {
+    background: $overlay;
+    color: $text;
+}
+
+Button.-primary, Button:focus {
+    background: $accent;
+    color: $background;
+}
+
+Button.-success {
+    background: $green;
+    color: $background;
+}
+
+Button.-error {
+    background: $red;
+    color: $background;
+}
+
+Button.-warning {
+    background: $yellow;
+    color: $background;
+}
+
+Label.-title {
+    color: $accent;
+    text-style: bold;
+}
+
+Static.-muted {
+    color: $muted;
+}
+
+Static.-empty-state {
+    color: $muted;
+    padding: 2;
+    content-align: center middle;
+}
