@@ -30,6 +30,7 @@ from jobctl.core.events import (
     ConfirmationRequestedEvent,
     JobctlEvent,
 )
+from jobctl.llm.base import Message
 
 if TYPE_CHECKING:  # pragma: no cover - import-time typing only
     from jobctl.tui.app import JobctlApp
@@ -99,8 +100,54 @@ class ChatView(Screen):
                 "to send. Try `/help` for available slash commands."
             )
         )
+        self._restore_session_history()
         self._handle_pending_slash_if_any()
         self._handle_pending_chat_message_if_any()
+
+    def _restore_session_history(self) -> None:
+        app = self.app
+        conn = getattr(app, "conn", None)
+        session_id = getattr(app, "session_id", None)
+        if conn is None or not session_id:
+            return
+        try:
+            from jobctl.agent.session import load_session
+        except Exception:  # pragma: no cover - agent deps may be missing in tests
+            return
+        try:
+            saved = load_session(conn, session_id)
+        except Exception:  # pragma: no cover - table may be absent in smoke tests
+            return
+        if saved is None:
+            return
+        log = self.query_one("#chat-log", RichLog)
+        for message in saved.get("messages") or []:
+            role = message.get("role")
+            content = message.get("content")
+            if not role or not content:
+                continue
+            log.write(Markdown(f"**{role}:** {content}"))
+
+    def _persist_session(self, extra_message: Message | None = None) -> None:
+        app = self.app
+        conn = getattr(app, "conn", None)
+        session_id = getattr(app, "session_id", None)
+        if conn is None or not session_id:
+            return
+        try:
+            from jobctl.agent.session import load_session, save_session
+            from jobctl.agent.state import new_state
+        except Exception:  # pragma: no cover - agent deps may be missing in tests
+            return
+        try:
+            state = load_session(conn, session_id) or new_state(session_id)
+            if extra_message is not None:
+                messages = list(state.get("messages") or [])
+                messages.append(extra_message)
+                state["messages"] = messages
+            save_session(conn, state)
+        except Exception:  # pragma: no cover - best-effort persistence
+            return
 
     def on_unmount(self) -> None:
         if self._pump_task is not None:
@@ -153,8 +200,11 @@ class ChatView(Screen):
             if handled:
                 return
 
+        user_message = Message(role="user", content=text)
+        self._persist_session(extra_message=user_message)
         self.bus.publish(AgentDoneEvent(role="user", content=text))
         reply = self._echo_reply(text)
+        self._persist_session(extra_message=Message(role="assistant", content=reply))
         self.bus.publish(AgentDoneEvent(role="assistant", content=reply))
 
     def _echo_reply(self, text: str) -> str:
