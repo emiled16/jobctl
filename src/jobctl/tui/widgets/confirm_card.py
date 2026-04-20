@@ -87,6 +87,7 @@ class InlineConfirmCard(Vertical):
             ConfirmationAnsweredEvent(
                 confirm_id=self.request.confirm_id,
                 answer=answer,
+                payload=dict(self.request.payload),
             )
         )
         self.remove()

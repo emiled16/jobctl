@@ -30,6 +30,9 @@ from jobctl.core.events import (
 from jobctl.llm.base import Message
 
 
+_AGENT_MODES = ("chat", "ingest", "curate", "apply", "graph_qa")
+
+
 @dataclass
 class _PendingStreamMessage:
     """Mutable scratchpad used while assembling streamed agent tokens."""
@@ -245,13 +248,20 @@ class ChatView(Vertical):
             return True
         if command == "mode":
             log = self.query_one("#chat-log", RichLog)
-            app = self.app
-            current = getattr(app, "agent_mode", "chat")
             if not rest:
+                current = self._current_agent_mode()
                 log.write(Markdown(f"_current mode: **{current}**_"))
                 return True
-            setattr(app, "agent_mode", rest)
-            log.write(Markdown(f"_mode set to **{rest}**_"))
+            if rest not in _AGENT_MODES:
+                valid = ", ".join(f"`{mode}`" for mode in _AGENT_MODES)
+                log.write(Markdown(f"_unknown mode `{rest}`; valid modes: {valid}_"))
+                return True
+            runner = self._resolve_runner()
+            if runner is None or not hasattr(runner, "submit_mode_change"):
+                log.write(Markdown("_mode changes require an agent runner_"))
+                return True
+            asyncio.create_task(runner.submit_mode_change(rest))
+            log.write(Markdown(f"_confirm mode change to **{rest}**_"))
             return True
         if command in {"chat", "graph", "tracker", "apply", "curate", "settings"}:
             show_view = getattr(self.app, "show_view", None)
@@ -312,6 +322,24 @@ class ChatView(Vertical):
             return
 
         log.write(Markdown(f"_unknown /report target `{kind}`; try `coverage` or `summary`._"))
+
+    def _current_agent_mode(self) -> str:
+        app = self.app
+        conn = getattr(app, "conn", None)
+        session_id = getattr(app, "session_id", None)
+        if conn is None or not session_id:
+            return "chat"
+        try:
+            from jobctl.agent.session import load_session
+        except Exception:  # pragma: no cover - agent deps may be missing in tests
+            return "chat"
+        try:
+            state = load_session(conn, session_id)
+        except Exception:  # pragma: no cover - table may be absent in smoke tests
+            return "chat"
+        if state is None:
+            return "chat"
+        return str(state.get("mode") or "chat")
 
     async def _pump_events(self) -> None:
         assert self._subscription is not None
