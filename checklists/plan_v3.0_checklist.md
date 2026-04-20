@@ -4,7 +4,7 @@ Reference plan: `plans/plan_v3.0.md`
 
 ## M1: Navigation And Command Contract Cleanup
 
-- [ ] T1: Add a public `JobctlApp.show_view(name)` method for ContentSwitcher navigation
+- [x] T1: Add a public `JobctlApp.show_view(name)` method for ContentSwitcher navigation
 - [ ] T2: Fix Chat slash navigation commands to use `JobctlApp.show_view`
 - [ ] T3: Convert palette view commands to direct `JobctlApp.show_view` actions
 - [ ] T4: Add Textual pilot tests for global navigation, slash navigation, and palette navigation

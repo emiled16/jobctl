@@ -166,7 +166,7 @@ class JobctlApp(App):
         self.title = f"jobctl - {self.project_root}"
         self.bus.attach_loop(self._get_event_loop())
         self._register_default_palette_commands()
-        self._show_view(self.start_screen, initial=True)
+        self.show_view(self.start_screen, initial=True)
 
     def _get_event_loop(self):
         import asyncio
@@ -217,9 +217,10 @@ class JobctlApp(App):
                 )
             )
 
-    def _show_view(self, name: str, *, initial: bool = False) -> None:
+    def show_view(self, name: str, *, initial: bool = False) -> None:
+        """Switch the main content area to a named app view."""
         if name not in SCREEN_NAMES:
-            return
+            raise ValueError(f"Unknown view: {name}")
         switcher = self.query_one("#main-switcher", ContentSwitcher)
         if switcher.current != name:
             switcher.current = name
@@ -229,6 +230,9 @@ class JobctlApp(App):
             self._focus_chat_input()
             if initial:
                 self._handle_initial_chat_message()
+
+    def _show_view(self, name: str, *, initial: bool = False) -> None:
+        self.show_view(name, initial=initial)
 
     def _focus_chat_input(self) -> None:
         try:
@@ -253,7 +257,7 @@ class JobctlApp(App):
 
     def dispatch_slash(self, command: str) -> None:
         self.pending_slash = command
-        self._show_view("chat")
+        self.show_view("chat")
         from jobctl.tui.views.chat import ChatView
 
         try:
@@ -263,22 +267,22 @@ class JobctlApp(App):
             pass
 
     def action_show_chat(self) -> None:
-        self._show_view("chat")
+        self.show_view("chat")
 
     def action_show_graph(self) -> None:
-        self._show_view("graph")
+        self.show_view("graph")
 
     def action_show_tracker(self) -> None:
-        self._show_view("tracker")
+        self.show_view("tracker")
 
     def action_show_apply(self) -> None:
-        self._show_view("apply")
+        self.show_view("apply")
 
     def action_show_curate(self) -> None:
-        self._show_view("curate")
+        self.show_view("curate")
 
     def action_show_settings(self) -> None:
-        self._show_view("settings")
+        self.show_view("settings")
 
     def action_toggle_sidebar(self) -> None:
         sidebar = self.query_one("#sidebar")
