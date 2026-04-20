@@ -340,6 +340,27 @@ class ChatView(Vertical):
 
         log.write(Markdown(f"_unknown /report target `{kind}`; try `coverage` or `summary`._"))
 
+    def open_resume_picker(self) -> None:
+        self._render_event(
+            ConfirmationRequestedEvent(
+                question="Choose a resume file to ingest.",
+                confirm_id=uuid.uuid4().hex,
+                kind="file_pick_resume",
+            )
+        )
+
+    def open_github_ingest_input(self) -> None:
+        self._render_event(
+            ConfirmationRequestedEvent(
+                question="Which GitHub profile or repos should I ingest?",
+                confirm_id=uuid.uuid4().hex,
+                kind="github_user",
+            )
+        )
+
+    def open_apply_input(self) -> None:
+        self._open_apply_input()
+
     def _open_apply_input(self) -> None:
         self._render_event(
             ConfirmationRequestedEvent(
