@@ -6,7 +6,7 @@ Reference plan: `plans/plan_v3.0.md`
 
 - [x] T1: Add a public `JobctlApp.show_view(name)` method for ContentSwitcher navigation
 - [x] T2: Fix Chat slash navigation commands to use `JobctlApp.show_view`
-- [ ] T3: Convert palette view commands to direct `JobctlApp.show_view` actions
+- [x] T3: Convert palette view commands to direct `JobctlApp.show_view` actions
 - [ ] T4: Add Textual pilot tests for global navigation, slash navigation, and palette navigation
 
 ## M2: Streaming Chat And Inline Agent Flow Completion
