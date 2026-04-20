@@ -253,8 +253,13 @@ class ChatView(Vertical):
             setattr(app, "agent_mode", rest)
             log.write(Markdown(f"_mode set to **{rest}**_"))
             return True
-        if command == "graph":
-            self.app.switch_screen("graph")
+        if command in {"chat", "graph", "tracker", "apply", "curate", "settings"}:
+            show_view = getattr(self.app, "show_view", None)
+            if show_view is None:
+                log = self.query_one("#chat-log", RichLog)
+                log.write(Markdown("_view navigation is unavailable in this app_"))
+                return True
+            show_view(command)
             return True
         if command == "report":
             self._render_report(rest or "summary")
