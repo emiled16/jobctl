@@ -25,7 +25,7 @@ Reference plan: `docs/plan-v2.md`
 - [x] T12: Implement new `JobctlApp` with header bar, main pane switcher, and status footer
 - [x] T13: Implement `CommandPaletteOverlay` widget in `src/jobctl/tui/widgets/command_palette.py`
 - [x] T14: Implement `KeybindingHelpOverlay` widget in `src/jobctl/tui/widgets/help_overlay.py`
-- [ ] T15: Port `src/jobctl/tui/profile_view.py` to `src/jobctl/tui/views/graph.py` as `GraphView`
+- [x] T15: Port `src/jobctl/tui/profile_view.py` to `src/jobctl/tui/views/graph.py` as `GraphView`
 - [ ] T16: Port `src/jobctl/tui/tracker_view.py` to `src/jobctl/tui/views/tracker.py` as `TrackerView`
 - [ ] T17: Port `src/jobctl/tui/materials_render.py` to `src/jobctl/tui/views/apply.py` as stub `ApplyView`
 - [ ] T18: Implement stub `ChatView` Textual Screen in `src/jobctl/tui/views/chat.py`
