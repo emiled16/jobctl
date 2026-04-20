@@ -35,7 +35,7 @@ class _PendingStreamMessage:
     """Mutable scratchpad used while assembling streamed agent tokens."""
 
     buffer: str = ""
-    line_index: int | None = None
+    widget: Any | None = None
 
 
 class ChatView(Vertical):
@@ -327,15 +327,24 @@ class ChatView(Vertical):
         log = self.query_one("#chat-log", RichLog)
         if isinstance(event, AgentTokenEvent):
             self._stream.buffer += event.token
-            log.write(event.token)
+            if self._stream.widget is None:
+                from jobctl.tui.widgets.streaming_message import StreamingMessage
+
+                container = self.query_one(Vertical)
+                self._stream.widget = StreamingMessage()
+                container.mount(self._stream.widget, before=self.query_one("#chat-input"))
+            self._stream.widget.append(event.token)
             return
         if isinstance(event, AgentDoneEvent):
             if event.role == "user":
                 return
+            content = event.content
             if self._stream.buffer:
-                log.write("\n")
+                content = content or self._stream.buffer
+                if self._stream.widget is not None:
+                    self._stream.widget.remove()
                 self._stream = _PendingStreamMessage()
-            log.write(Markdown(f"**{event.role}:** {event.content}"))
+            log.write(Markdown(f"**{event.role}:** {content}"))
             return
         if isinstance(event, AgentToolCallEvent):
             pretty_args = ", ".join(f"{k}={v!r}" for k, v in event.args.items())
