@@ -137,6 +137,30 @@ async def test_apply_view_refreshes_on_apply_lifecycle_done(tmp_path: Path) -> N
     conn.close()
 
 
+@pytest.mark.anyio
+async def test_apply_status_handles_markup_like_error_message(tmp_path: Path) -> None:
+    conn = get_connection(tmp_path / ".jobctl.db")
+    app = _make_app(tmp_path, conn)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        view = app.query_one(ApplyView)
+        message = (
+            "error: 4 validation errors for ExtractedJD\n"
+            "title\n"
+            "Input should be a valid string [type=string_type, input_value=None]"
+        )
+
+        view._set_status(message)
+        await pilot.pause()
+
+        assert "input_value=None" in str(app.query_one("#apply-status").renderable)
+
+        await app.action_quit()
+
+    conn.close()
+
+
 def _jd() -> ExtractedJD:
     return ExtractedJD(
         title="Engineer",

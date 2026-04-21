@@ -107,6 +107,31 @@ class CurationProposalCard(Vertical):
             )
         if self.proposal.kind == "prune":
             return f"Prune node {payload.get('node_id')}\nReason: {payload.get('reason', '')}"
+        if self.proposal.kind == "add_fact":
+            fact = payload.get("fact") or payload
+            return (
+                f"Add fact: {fact.get('entity_type')} / {fact.get('entity_name')}\n"
+                f"Source: {payload.get('source_ref', '')}\n"
+                f"Text: {fact.get('text_representation', '')}\n"
+                f"Reason: {payload.get('reason', '')}"
+            )
+        if self.proposal.kind == "update_fact":
+            return (
+                f"Update node: {payload.get('node_id')}\n"
+                f"Source: {payload.get('source_ref', '')}\n"
+                f"Reason: {payload.get('reason', '')}\n"
+                f"Current: {payload.get('current_text', '')}\n"
+                f"Proposed: {payload.get('proposed_text', '')}\n"
+                f"Risk: {'requires confirmation' if payload.get('requires_confirmation') else 'low'}"
+            )
+        if self.proposal.kind == "refine_experience":
+            return (
+                f"Refine node: {payload.get('target_node_id')}\n"
+                f"Source: {payload.get('source_ref', '')}\n"
+                f"Reason: {payload.get('reason', '')}\n"
+                f"Proposed: {payload.get('resume_ready_phrasing', '')}\n"
+                f"Risk: {'requires review' if payload.get('requires_review') else 'low'}"
+            )
         return json.dumps(payload, indent=2)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

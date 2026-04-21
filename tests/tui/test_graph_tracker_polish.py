@@ -10,7 +10,7 @@ from textual.widgets import Input, TextArea, Tree
 
 from jobctl.config import JobctlConfig
 from jobctl.db.connection import get_connection
-from jobctl.db.graph import add_node, get_node
+from jobctl.db.graph import add_edge, add_node, get_node
 from jobctl.jobs.tracker import create_application, get_application
 from jobctl.llm.schemas import ExtractedJD, FitEvaluation
 from jobctl.tui.app import JobctlApp
@@ -67,6 +67,26 @@ async def test_graph_delete_confirmed_removes_node(tmp_path: Path) -> None:
 
         with pytest.raises(KeyError):
             get_node(conn, node_id)
+
+        await app.action_quit()
+
+    conn.close()
+
+
+@pytest.mark.anyio
+async def test_graph_tree_shows_relationships(tmp_path: Path) -> None:
+    conn = get_connection(tmp_path / ".jobctl.db")
+    role_id = add_node(conn, "role", "Engineer", {}, "Engineer at Acme")
+    company_id = add_node(conn, "company", "Acme", {}, "Acme")
+    add_edge(conn, role_id, company_id, "worked_at", {})
+    app = _make_app(tmp_path, conn, "graph")
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree = app.query_one("#graph-tree", Tree)
+        labels = [str(node.label) for node in tree.root.children[1].children[0].children]
+
+        assert "-> worked_at -> Acme" in labels
 
         await app.action_quit()
 

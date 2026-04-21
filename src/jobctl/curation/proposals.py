@@ -7,6 +7,8 @@ can accept, reject, or edit. The ``payload`` dict is kind-specific:
 * ``prune``: ``{"node_id", "reason"}``
 * ``connect``: ``{"source_id", "target_id", "relation"}``
 * ``rephrase``: ``{"node_id", "original_text", "proposed_text"}``
+* ``add_fact``: ``{"fact", "source_ref"}``
+* ``update_fact``: ``{"node_id", "proposed_text", "proposed_properties"}``
 """
 
 from __future__ import annotations
@@ -18,7 +20,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-ProposalKind = Literal["merge", "prune", "connect", "rephrase"]
+ProposalKind = Literal[
+    "merge",
+    "prune",
+    "connect",
+    "rephrase",
+    "add_fact",
+    "update_fact",
+    "refine_experience",
+]
 ProposalStatus = Literal["pending", "accepted", "rejected", "edited"]
 
 

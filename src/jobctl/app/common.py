@@ -62,14 +62,6 @@ def print_config(config: JobctlConfig) -> None:
     Console().print(table)
 
 
-def mask_api_key(api_key: str) -> str:
-    if not api_key:
-        return ""
-    if len(api_key) <= 4:
-        return "*" * len(api_key)
-    return f"{'*' * (len(api_key) - 4)}{api_key[-4:]}"
-
-
 def copy_bundled_templates(destination: Path) -> None:
     template_root = resources.files("jobctl").joinpath("templates")
     for source in template_root.iterdir():

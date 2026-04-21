@@ -43,11 +43,7 @@ def start_resume_ingest(
     )
 
     def _do_ingest() -> dict[str, Any]:
-        from jobctl.ingestion.resume import (
-            extract_facts_from_resume,
-            persist_facts,
-            read_resume,
-        )
+        from jobctl.ingestion.resume import ingest_resume_enriched
 
         worker_conn = conn
         worker_store = store
@@ -56,7 +52,6 @@ def start_resume_ingest(
             worker_store = BackgroundJobStore(worker_conn)
 
         try:
-            text = read_resume(resume_path)
 
             class _Shim:
                 def chat_structured(self, messages, response_format):
@@ -74,18 +69,29 @@ def start_resume_ingest(
                     return provider.embed([text])[0]
 
             shim = _Shim()
-            profile = extract_facts_from_resume(text, shim)
-            added = persist_facts(
+            summary = ingest_resume_enriched(
                 worker_conn,
-                profile.facts,
+                resume_path,
                 shim,
-                interactive=False,
                 bus=bus,
                 store=worker_store,
                 job_id=job_id,
             )
-            bus.publish(IngestDoneEvent(source="resume", facts_added=added, job_id=job_id))
-            return {"facts_added": added}
+            bus.publish(
+                IngestDoneEvent(
+                    source="resume",
+                    facts_added=int(summary["facts_added"]),
+                    job_id=job_id,
+                    facts_extracted=int(summary["facts_extracted"]),
+                    duplicates_skipped=int(summary["duplicates_skipped"]),
+                    updates_proposed=int(summary["updates_proposed"]),
+                    refinement_questions_saved=int(summary["refinement_questions_saved"]),
+                    pending_question_ids=list(summary["pending_question_ids"]),
+                    can_start_refinement=bool(summary["can_start_refinement"]),
+                    summary=dict(summary),
+                )
+            )
+            return summary
         finally:
             if db_path is not None:
                 worker_conn.close()

@@ -310,6 +310,18 @@ class ChatView(Vertical):
             log = self.query_one("#chat-log", RichLog)
             log.write(Markdown("_started apply workflow_"))
             return True
+        if command == "refine" and rest == "resume":
+            runner = self._resolve_runner()
+            log = self.query_one("#chat-log", RichLog)
+            if runner is None or not hasattr(runner, "submit_workflow"):
+                log.write(Markdown("_resume refinement requires an agent runner_"))
+                return True
+            from jobctl.agent.state import make_workflow_request
+
+            request = make_workflow_request("resume_refinement", {})
+            asyncio.create_task(runner.submit_workflow(request))
+            log.write(Markdown("_started resume refinement_"))
+            return True
         if command in {"chat", "graph", "tracker", "apply", "curate", "settings"}:
             show_view = getattr(self.app, "show_view", None)
             if show_view is None:

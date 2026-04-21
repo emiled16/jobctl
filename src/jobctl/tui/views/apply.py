@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -380,7 +381,7 @@ class ApplyView(Vertical):
         self.run_worker(_do_generate(), exclusive=False)
 
     def _set_status(self, message: str) -> None:
-        self.query_one("#apply-status", Static).update(message)
+        self.query_one("#apply-status", Static).update(Text(str(message)))
 
     def _cover_letter_missing_prerequisites(self, row: ApplicationRow) -> str | None:
         if not row.jd_structured:

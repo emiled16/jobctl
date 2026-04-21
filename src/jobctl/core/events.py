@@ -71,6 +71,13 @@ class IngestDoneEvent(JobctlEvent):
     source: str
     facts_added: int
     job_id: str | None = None
+    facts_extracted: int = 0
+    duplicates_skipped: int = 0
+    updates_proposed: int = 0
+    refinement_questions_saved: int = 0
+    pending_question_ids: list[str] = field(default_factory=list)
+    can_start_refinement: bool = False
+    summary: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

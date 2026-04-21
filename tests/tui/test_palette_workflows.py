@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from textual.widgets import ContentSwitcher
 
+from jobctl.agent.state import WorkflowRequest
 from jobctl.config import JobctlConfig
 from jobctl.db.connection import get_connection
 from jobctl.tui.app import JobctlApp
@@ -15,6 +16,14 @@ from jobctl.tui.widgets.apply_input import ApplyInput
 from jobctl.tui.widgets.file_picker import FilePicker
 from jobctl.tui.widgets.github_ingest_input import GitHubIngestInput
 from tests.conftest import FakeLLMProvider
+
+
+class _WorkflowRunner:
+    def __init__(self) -> None:
+        self.requests: list[WorkflowRequest] = []
+
+    async def submit_workflow(self, request: WorkflowRequest) -> None:
+        self.requests.append(request)
 
 
 def _make_app(tmp_path: Path) -> JobctlApp:
@@ -31,6 +40,8 @@ def _make_app(tmp_path: Path) -> JobctlApp:
 @pytest.mark.anyio
 async def test_palette_workflow_commands_open_real_inputs(tmp_path: Path) -> None:
     app = _make_app(tmp_path)
+    runner = _WorkflowRunner()
+    app._runner = runner
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -54,6 +65,11 @@ async def test_palette_workflow_commands_open_real_inputs(tmp_path: Path) -> Non
         commands["Workflow: Curate"].action()
         await pilot.pause()
         assert app.query_one("#main-switcher", ContentSwitcher).current == "curate"
+
+        commands["Workflow: Refine resume"].action()
+        await pilot.pause()
+        assert app.query_one("#main-switcher", ContentSwitcher).current == "chat"
+        assert runner.requests == [{"kind": "resume_refinement", "payload": {}}]
 
         await app.action_quit()
 

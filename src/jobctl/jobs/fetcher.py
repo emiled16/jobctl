@@ -89,12 +89,20 @@ def extract_jd(html: str, llm_client) -> ExtractedJD:
                 "Extract a structured job description from the provided page text. Return title, "
                 "company, location, compensation when present, requirements, responsibilities, "
                 "qualifications, nice-to-haves, and raw_text. Preserve factual details and do "
-                "not invent missing fields."
+                "not invent missing fields. If a field is not present in the page, return an "
+                "empty string for text fields and an empty array for list fields (never null)."
             ),
         },
         {"role": "user", "content": cleaned_text},
     ]
-    return llm_client.chat_structured(messages, response_format=ExtractedJD)
+    jd = llm_client.chat_structured(messages, response_format=ExtractedJD)
+    if not (jd.title.strip() or jd.company.strip()):
+        raise ValueError(
+            "Could not extract a usable job description from that page. "
+            "The page may be gated or dynamically rendered. "
+            "Re-run Apply and paste the full job description text instead."
+        )
+    return jd
 
 
 def fetch_and_parse_jd(url_or_text: str, llm_client) -> ExtractedJD:

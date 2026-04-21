@@ -225,6 +225,37 @@ def _migration_007_create_embedding_meta(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_008_create_refinement_questions(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE refinement_questions (
+            id TEXT PRIMARY KEY,
+            source_type TEXT NOT NULL,
+            source_ref TEXT,
+            target_node_id TEXT REFERENCES nodes(id) ON DELETE SET NULL,
+            fact_json TEXT,
+            category TEXT NOT NULL,
+            prompt TEXT NOT NULL,
+            options_json TEXT NOT NULL,
+            allow_free_text INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending',
+            answer_text TEXT,
+            answer_json TEXT,
+            priority INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            answered_at TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX idx_refinement_questions_status ON refinement_questions (status)")
+    conn.execute(
+        "CREATE INDEX idx_refinement_questions_target ON refinement_questions (target_node_id)"
+    )
+    conn.execute(
+        "CREATE INDEX idx_refinement_questions_source ON refinement_questions (source_type, source_ref)"
+    )
+
+
 MIGRATIONS: list[Migration] = [
     ("001_create_graph_tables", _migration_001_create_graph_tables),
     ("002_create_tracker_tables", _migration_002_create_tracker_tables),
@@ -233,4 +264,5 @@ MIGRATIONS: list[Migration] = [
     ("005_create_agent_sessions", _migration_005_create_agent_sessions),
     ("006_create_curation_proposals", _migration_006_create_curation_proposals),
     ("007_create_embedding_meta", _migration_007_create_embedding_meta),
+    ("008_create_refinement_questions", _migration_008_create_refinement_questions),
 ]

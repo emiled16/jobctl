@@ -88,6 +88,7 @@ def test_pending_confirmation_beats_slash_command() -> None:
         ("resume_ingest", "ingest_node"),
         ("github_ingest", "ingest_node"),
         ("apply", "apply_node"),
+        ("resume_refinement", "refinement_node"),
     ],
 )
 def test_workflow_requests_route_without_slash_text(

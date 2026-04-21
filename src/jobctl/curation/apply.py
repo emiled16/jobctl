@@ -7,15 +7,28 @@ from typing import Any
 
 from jobctl.db.graph import (
     add_edge,
+    add_edge_if_missing,
+    add_node,
+    add_node_source,
     delete_node,
+    edge_exists,
     get_edges_from,
     get_edges_to,
     get_node,
+    merge_node_properties,
+    search_nodes,
     update_node,
 )
+from jobctl.db.vectors import embed_node
+from jobctl.llm.schemas import ExtractedFact
 
 
-def apply_proposal(conn: sqlite3.Connection, kind: str, payload: dict[str, Any]) -> None:
+def apply_proposal(
+    conn: sqlite3.Connection,
+    kind: str,
+    payload: dict[str, Any],
+    llm_client: Any | None = None,
+) -> None:
     if kind == "merge":
         apply_merge(conn, payload)
         return
@@ -27,6 +40,15 @@ def apply_proposal(conn: sqlite3.Connection, kind: str, payload: dict[str, Any])
         return
     if kind == "prune":
         apply_prune(conn, payload)
+        return
+    if kind == "add_fact":
+        apply_add_fact(conn, payload, llm_client)
+        return
+    if kind == "update_fact":
+        apply_update_fact(conn, payload, llm_client)
+        return
+    if kind == "refine_experience":
+        apply_refine_experience(conn, payload, llm_client)
         return
     raise ValueError(f"Unsupported proposal kind: {kind}")
 
@@ -49,11 +71,11 @@ def apply_merge(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
 
     for edge in get_edges_from(conn, drop_id):
         target_id = edge["target_id"]
-        if target_id != keep_id and not _edge_exists(conn, keep_id, target_id, edge["relation"]):
+        if target_id != keep_id and not edge_exists(conn, keep_id, target_id, edge["relation"]):
             add_edge(conn, keep_id, target_id, edge["relation"], edge.get("properties") or {})
     for edge in get_edges_to(conn, drop_id):
         source_id = edge["source_id"]
-        if source_id != keep_id and not _edge_exists(conn, source_id, keep_id, edge["relation"]):
+        if source_id != keep_id and not edge_exists(conn, source_id, keep_id, edge["relation"]):
             add_edge(conn, source_id, keep_id, edge["relation"], edge.get("properties") or {})
 
     conn.execute("UPDATE node_sources SET node_id = ? WHERE node_id = ?", (keep_id, drop_id))
@@ -77,7 +99,7 @@ def apply_connect(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
         raise ValueError("connect proposal requires source_id and target_id")
     get_node(conn, source_id)
     get_node(conn, target_id)
-    if not _edge_exists(conn, source_id, target_id, relation):
+    if not edge_exists(conn, source_id, target_id, relation):
         add_edge(conn, source_id, target_id, relation, {})
 
 
@@ -88,16 +110,114 @@ def apply_prune(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
     delete_node(conn, node_id)
 
 
-def _edge_exists(conn: sqlite3.Connection, source_id: str, target_id: str, relation: str) -> bool:
-    row = conn.execute(
-        """
-        SELECT 1 FROM edges
-        WHERE source_id = ? AND target_id = ? AND relation = ?
-        LIMIT 1
-        """,
-        (source_id, target_id, relation),
-    ).fetchone()
-    return row is not None
+def apply_add_fact(
+    conn: sqlite3.Connection,
+    payload: dict[str, Any],
+    llm_client: Any | None = None,
+) -> None:
+    fact = ExtractedFact.model_validate(payload.get("fact") or payload)
+    source_ref = str(payload.get("source_ref") or "")
+    node_id = add_node(
+        conn,
+        fact.entity_type.lower(),
+        fact.entity_name,
+        fact.properties,
+        fact.text_representation,
+    )
+    if llm_client is not None and hasattr(llm_client, "get_embedding"):
+        embed_node(conn, node_id, llm_client)
+    add_node_source(
+        conn,
+        node_id,
+        str(payload.get("source_type") or "resume"),
+        source_ref,
+        float(payload.get("confidence") or 1.0),
+        fact.text_representation,
+    )
+    related_id = _resolve_related_node(conn, fact, llm_client)
+    if related_id is not None and fact.relation:
+        add_edge_if_missing(conn, node_id, related_id, fact.relation, {})
+
+
+def apply_update_fact(
+    conn: sqlite3.Connection,
+    payload: dict[str, Any],
+    llm_client: Any | None = None,
+) -> None:
+    node_id = str(payload.get("node_id") or "")
+    if not node_id:
+        raise ValueError("update_fact proposal requires node_id")
+    node = get_node(conn, node_id)
+    proposed_properties = payload.get("proposed_properties")
+    if proposed_properties is not None and not isinstance(proposed_properties, dict):
+        raise ValueError("update_fact proposed_properties must be an object")
+    update_fields: dict[str, Any] = {}
+    if proposed_properties:
+        update_fields["properties"] = merge_node_properties(
+            node.get("properties"), proposed_properties
+        )
+    proposed_text = payload.get("proposed_text")
+    if proposed_text:
+        update_fields["text_representation"] = _append_once(
+            node["text_representation"], str(proposed_text)
+        )
+    if update_fields:
+        update_node(conn, node_id, **update_fields)
+    add_node_source(
+        conn,
+        node_id,
+        str(payload.get("source_type") or "resume"),
+        str(payload.get("source_ref") or ""),
+        float(payload.get("confidence") or 1.0),
+        str(proposed_text or ""),
+    )
+    if llm_client is not None and hasattr(llm_client, "get_embedding"):
+        embed_node(conn, node_id, llm_client)
+
+
+def apply_refine_experience(
+    conn: sqlite3.Connection,
+    payload: dict[str, Any],
+    llm_client: Any | None = None,
+) -> None:
+    target_node_id = payload.get("target_node_id")
+    node_updates = payload.get("node_updates") or {}
+    if target_node_id and isinstance(node_updates, dict):
+        apply_update_fact(
+            conn,
+            {
+                "node_id": target_node_id,
+                "proposed_properties": node_updates,
+                "proposed_text": payload.get("resume_ready_phrasing"),
+                "source_type": "resume_refinement",
+                "source_ref": payload.get("source_ref"),
+                "confidence": 1.0,
+            },
+            llm_client,
+        )
+
+
+def _resolve_related_node(
+    conn: sqlite3.Connection,
+    fact: ExtractedFact,
+    llm_client: Any | None,
+) -> str | None:
+    if not fact.related_to:
+        return None
+    matches = search_nodes(conn, name_contains=fact.related_to)
+    exact = [node for node in matches if node["name"].lower() == fact.related_to.lower()]
+    if exact:
+        return exact[0]["id"]
+    node_id = add_node(conn, "unknown", fact.related_to, {}, fact.related_to)
+    if llm_client is not None and hasattr(llm_client, "get_embedding"):
+        embed_node(conn, node_id, llm_client)
+    return node_id
+
+
+def _append_once(existing: str, addition: str) -> str:
+    if not addition or addition in existing:
+        return existing
+    return f"{existing}\n{addition}"
 
 
 __all__ = [
@@ -105,5 +225,7 @@ __all__ = [
     "apply_merge",
     "apply_proposal",
     "apply_prune",
+    "apply_add_fact",
+    "apply_update_fact",
     "apply_rephrase",
 ]

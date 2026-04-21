@@ -39,12 +39,32 @@ class ExtractedJD(BaseModel):
     title: str
     company: str
     location: str
-    compensation: str | None
+    compensation: str | None = None
     requirements: list[str] = Field(default_factory=list)
     responsibilities: list[str] = Field(default_factory=list)
     qualifications: list[str] = Field(default_factory=list)
     nice_to_haves: list[str] = Field(default_factory=list)
     raw_text: str
+
+    @field_validator("title", "company", "location", "raw_text", mode="before")
+    @classmethod
+    def _coerce_null_string(cls, value: Any) -> Any:
+        if value is None:
+            return ""
+        return value
+
+    @field_validator(
+        "requirements",
+        "responsibilities",
+        "qualifications",
+        "nice_to_haves",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_null_list(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        return value
 
 
 class FitEvaluation(BaseModel):

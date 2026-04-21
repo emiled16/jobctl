@@ -1,4 +1,10 @@
-"""Inline Apply workflow input used by Chat and palette starts."""
+"""Inline Apply workflow input used by Chat and palette starts.
+
+The widget first asks the user whether they want to provide a job URL or
+paste the full job description text. Based on that choice the input switches
+between a single-line ``Input`` (for URLs) and a multi-line ``TextArea``
+(for pasted JDs) so pasting multi-paragraph descriptions works reliably.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,7 @@ import asyncio
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input, Static, TextArea
 
 from jobctl.agent.state import make_workflow_request
 from jobctl.core.events import (
@@ -38,6 +44,30 @@ class ApplyInput(Vertical):
     ApplyInput Button {
         margin: 0 1;
     }
+    ApplyInput #apply-input-url-row,
+    ApplyInput #apply-input-text-row,
+    ApplyInput #apply-input-submit-row {
+        display: none;
+    }
+    ApplyInput.mode-url #apply-input-choice-row,
+    ApplyInput.mode-text #apply-input-choice-row {
+        display: none;
+    }
+    ApplyInput.mode-url #apply-input-url-row,
+    ApplyInput.mode-url #apply-input-submit-row {
+        display: block;
+    }
+    ApplyInput.mode-text #apply-input-text-row,
+    ApplyInput.mode-text #apply-input-submit-row {
+        display: block;
+    }
+    ApplyInput #apply-input-text {
+        height: 10;
+    }
+    ApplyInput #apply-input-hint {
+        color: #a6adc8;
+        margin-bottom: 1;
+    }
     """
 
     def __init__(self, request: ConfirmationRequestedEvent, *, bus: AsyncEventBus) -> None:
@@ -45,36 +75,79 @@ class ApplyInput(Vertical):
         self.request = request
         self.bus = bus
         self._error_message = ""
+        self._mode: str | None = None
 
     def compose(self) -> ComposeResult:
-        yield Vertical(
-            Static(self.request.question, id="apply-input-question"),
+        yield Static(self.request.question, id="apply-input-question")
+        yield Static(
+            "How would you like to provide the job description?",
+            id="apply-input-hint",
+        )
+        yield Horizontal(
+            Button("Paste JD text", id="apply-input-mode-text", variant="primary"),
+            Button("Use URL", id="apply-input-mode-url"),
+            Button("Cancel", id="apply-input-cancel-choice", variant="error"),
+            id="apply-input-choice-row",
+        )
+        yield Horizontal(
             Input(
-                placeholder="Job URL or pasted JD text",
-                id="apply-input-value",
+                placeholder="https://example.com/jobs/123",
+                id="apply-input-url",
             ),
-            Static("", id="apply-input-error"),
-            Horizontal(
-                Button("Start", id="apply-input-start", variant="success"),
-                Button("Cancel", id="apply-input-cancel", variant="error"),
+            id="apply-input-url-row",
+        )
+        yield Vertical(
+            Static(
+                "Paste the full job description below (multi-line supported).",
+                id="apply-input-text-label",
             ),
+            TextArea(id="apply-input-text"),
+            id="apply-input-text-row",
+        )
+        yield Static("", id="apply-input-error")
+        yield Horizontal(
+            Button("Start", id="apply-input-start", variant="success"),
+            Button("Back", id="apply-input-back"),
+            Button("Cancel", id="apply-input-cancel", variant="error"),
+            id="apply-input-submit-row",
         )
 
-    def on_mount(self) -> None:
-        self.query_one("#apply-input-value", Input).focus()
-
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id != "apply-input-value":
+        if event.input.id != "apply-input-url":
             return
         event.stop()
         self._submit()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "apply-input-start":
+        button_id = event.button.id
+        if button_id == "apply-input-mode-url":
+            self._set_mode("url")
+        elif button_id == "apply-input-mode-text":
+            self._set_mode("text")
+        elif button_id == "apply-input-start":
             self._submit()
-            return
-        if event.button.id == "apply-input-cancel":
+        elif button_id == "apply-input-back":
+            self._set_mode(None)
+        elif button_id in ("apply-input-cancel", "apply-input-cancel-choice"):
             self.action_cancel()
+
+    def _set_mode(self, mode: str | None) -> None:
+        self._mode = mode
+        self.remove_class("mode-url")
+        self.remove_class("mode-text")
+        self._show_error("")
+        if mode == "url":
+            self.add_class("mode-url")
+            try:
+                self.query_one("#apply-input-url", Input).focus()
+            except Exception:
+                pass
+        elif mode == "text":
+            self.add_class("mode-text")
+            try:
+                self.query_one("#apply-input-text", TextArea).focus()
+            except Exception:
+                pass
 
     def action_cancel(self) -> None:
         self.bus.publish(
@@ -86,10 +159,20 @@ class ApplyInput(Vertical):
         self.remove()
 
     def _submit(self) -> None:
-        value = self.query_one("#apply-input-value", Input).value.strip()
-        if not value:
-            self._show_error("Enter a job URL or pasted job description.")
+        if self._mode == "url":
+            value = self.query_one("#apply-input-url", Input).value.strip()
+            empty_msg = "Enter a job URL."
+        elif self._mode == "text":
+            value = self.query_one("#apply-input-text", TextArea).text.strip()
+            empty_msg = "Paste the job description text."
+        else:
+            self._show_error("Choose whether to paste JD text or use a URL.")
             return
+
+        if not value:
+            self._show_error(empty_msg)
+            return
+
         runner = getattr(self.app, "agent_runner", None)
         if runner is None or not hasattr(runner, "submit_workflow"):
             self._show_error("Apply requires an agent runner.")

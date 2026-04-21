@@ -53,6 +53,82 @@ def add_edge(
     return edge_id
 
 
+def edge_exists(
+    conn: sqlite3.Connection,
+    source_id: str,
+    target_id: str,
+    relation: str,
+) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1 FROM edges
+        WHERE source_id = ? AND target_id = ? AND relation = ?
+        LIMIT 1
+        """,
+        (source_id, target_id, relation),
+    ).fetchone()
+    return row is not None
+
+
+def add_edge_if_missing(
+    conn: sqlite3.Connection,
+    source_id: str,
+    target_id: str,
+    relation: str,
+    properties: dict[str, Any] | None = None,
+) -> str | None:
+    if edge_exists(conn, source_id, target_id, relation):
+        return None
+    return add_edge(conn, source_id, target_id, relation, properties or {})
+
+
+def add_node_source(
+    conn: sqlite3.Connection,
+    node_id: str,
+    source_type: str,
+    source_ref: str | None,
+    confidence: float | None,
+    source_quote: str | None,
+) -> str:
+    source_id = str(uuid.uuid4())
+    conn.execute(
+        """
+        INSERT INTO node_sources (
+            id, node_id, source_type, source_ref, confidence, source_quote, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (source_id, node_id, source_type, source_ref, confidence, source_quote, _utc_now()),
+    )
+    conn.commit()
+    return source_id
+
+
+def merge_node_properties(
+    existing: dict[str, Any] | None,
+    incoming: dict[str, Any] | None,
+    *,
+    replace: bool = False,
+) -> dict[str, Any]:
+    merged = dict(existing or {})
+    for key, incoming_value in (incoming or {}).items():
+        if key not in merged or merged[key] in (None, "", [], {}):
+            merged[key] = incoming_value
+            continue
+        if replace:
+            merged[key] = incoming_value
+            continue
+        existing_value = merged[key]
+        if isinstance(existing_value, list):
+            additions = incoming_value if isinstance(incoming_value, list) else [incoming_value]
+            merged[key] = existing_value + [
+                item for item in additions if item not in existing_value
+            ]
+        elif isinstance(existing_value, dict) and isinstance(incoming_value, dict):
+            merged[key] = merge_node_properties(existing_value, incoming_value, replace=replace)
+    return merged
+
+
 def get_node(conn: sqlite3.Connection, node_id: str) -> Node:
     row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
     if row is None:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from textual.css.query import NoMatches
-from textual.widgets import Input
+from textual.widgets import Input, TextArea
 
 from jobctl.agent.state import WorkflowRequest
 from jobctl.config import JobctlConfig
@@ -40,7 +40,7 @@ def _make_app(tmp_path: Path, runner: _WorkflowRunner) -> JobctlApp:
 
 
 @pytest.mark.anyio
-async def test_apply_slash_without_payload_opens_input(tmp_path: Path) -> None:
+async def test_apply_slash_without_payload_requires_mode_choice(tmp_path: Path) -> None:
     runner = _WorkflowRunner()
     app = _make_app(tmp_path, runner)
 
@@ -54,7 +54,7 @@ async def test_apply_slash_without_payload_opens_input(tmp_path: Path) -> None:
         widget._submit()
         await pilot.pause()
 
-        assert widget._error_message == "Enter a job URL or pasted job description."
+        assert widget._error_message == "Choose whether to paste JD text or use a URL."
         assert runner.requests == []
 
         await app.action_quit()
@@ -64,7 +64,7 @@ async def test_apply_slash_without_payload_opens_input(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
-async def test_apply_input_submits_structured_workflow(tmp_path: Path) -> None:
+async def test_apply_input_url_mode_requires_value(tmp_path: Path) -> None:
     runner = _WorkflowRunner()
     app = _make_app(tmp_path, runner)
 
@@ -75,12 +75,99 @@ async def test_apply_input_submits_structured_workflow(tmp_path: Path) -> None:
         await pilot.pause()
 
         widget = app.query_one(ApplyInput)
-        widget.query_one("#apply-input-value", Input).value = "https://example.com/job"
+        widget._set_mode("url")
+        widget._submit()
+        await pilot.pause()
+
+        assert widget._error_message == "Enter a job URL."
+        assert runner.requests == []
+
+        await app.action_quit()
+
+    if isinstance(app.conn, sqlite3.Connection):
+        app.conn.close()
+
+
+@pytest.mark.anyio
+async def test_apply_input_text_mode_requires_value(tmp_path: Path) -> None:
+    runner = _WorkflowRunner()
+    app = _make_app(tmp_path, runner)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        chat = app.query_one(ChatView)
+        chat._handle_submission("/apply")
+        await pilot.pause()
+
+        widget = app.query_one(ApplyInput)
+        widget._set_mode("text")
+        widget._submit()
+        await pilot.pause()
+
+        assert widget._error_message == "Paste the job description text."
+        assert runner.requests == []
+
+        await app.action_quit()
+
+    if isinstance(app.conn, sqlite3.Connection):
+        app.conn.close()
+
+
+@pytest.mark.anyio
+async def test_apply_input_submits_url(tmp_path: Path) -> None:
+    runner = _WorkflowRunner()
+    app = _make_app(tmp_path, runner)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        chat = app.query_one(ChatView)
+        chat._handle_submission("/apply")
+        await pilot.pause()
+
+        widget = app.query_one(ApplyInput)
+        widget._set_mode("url")
+        widget.query_one("#apply-input-url", Input).value = "https://example.com/job"
         widget._submit()
         await pilot.pause()
 
         assert runner.requests == [
             {"kind": "apply", "payload": {"url_or_text": "https://example.com/job"}}
+        ]
+        with pytest.raises(NoMatches):
+            app.query_one(ApplyInput)
+
+        await app.action_quit()
+
+    if isinstance(app.conn, sqlite3.Connection):
+        app.conn.close()
+
+
+@pytest.mark.anyio
+async def test_apply_input_submits_multiline_pasted_jd(tmp_path: Path) -> None:
+    runner = _WorkflowRunner()
+    app = _make_app(tmp_path, runner)
+
+    pasted = (
+        "Senior Platform Engineer\n"
+        "Responsibilities:\n"
+        "- Build distributed systems\n"
+        "- Mentor engineers\n"
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        chat = app.query_one(ChatView)
+        chat._handle_submission("/apply")
+        await pilot.pause()
+
+        widget = app.query_one(ApplyInput)
+        widget._set_mode("text")
+        widget.query_one("#apply-input-text", TextArea).text = pasted
+        widget._submit()
+        await pilot.pause()
+
+        assert runner.requests == [
+            {"kind": "apply", "payload": {"url_or_text": pasted.strip()}}
         ]
         with pytest.raises(NoMatches):
             app.query_one(ApplyInput)
@@ -107,6 +194,25 @@ async def test_apply_slash_with_payload_submits_directly(tmp_path: Path) -> None
         ]
         with pytest.raises(NoMatches):
             app.query_one(ApplyInput)
+
+        await app.action_quit()
+
+    if isinstance(app.conn, sqlite3.Connection):
+        app.conn.close()
+
+
+@pytest.mark.anyio
+async def test_refine_resume_slash_submits_workflow(tmp_path: Path) -> None:
+    runner = _WorkflowRunner()
+    app = _make_app(tmp_path, runner)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        chat = app.query_one(ChatView)
+        chat._handle_submission("/refine resume")
+        await pilot.pause()
+
+        assert runner.requests == [{"kind": "resume_refinement", "payload": {}}]
 
         await app.action_quit()
 

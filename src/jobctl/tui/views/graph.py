@@ -270,8 +270,12 @@ class GraphView(Vertical):
             branch = tree.root.add(node_type.title())
             branch.expand()
             for row in type_rows:
-                child = branch.add_leaf(row["name"], data=row["id"])
+                child = branch.add(row["name"], data=row["id"])
                 child.add_leaf(json.dumps(json.loads(row["properties"] or "{}"), sort_keys=True))
+                for edge in get_edges_from(self.conn, row["id"]):
+                    child.add_leaf(f"-> {edge['relation']} -> {edge['target']['name']}")
+                for edge in get_edges_to(self.conn, row["id"]):
+                    child.add_leaf(f"<- {edge['relation']} <- {edge['source']['name']}")
         tree.root.expand()
 
     def _show_node(self, node_id: str) -> None:

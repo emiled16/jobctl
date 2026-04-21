@@ -237,6 +237,13 @@ class JobctlApp(App):
         )
         self.register_command(
             PaletteCommand(
+                label="Workflow: Refine resume",
+                description="Continue pending resume refinement questions",
+                action=self.start_resume_refinement,
+            )
+        )
+        self.register_command(
+            PaletteCommand(
                 label="Slash: /mode",
                 description="Show or change the agent mode",
                 action=lambda: self.dispatch_slash("/mode"),
@@ -335,6 +342,9 @@ class JobctlApp(App):
 
     def open_apply_input(self) -> None:
         self._with_chat_view("open_apply_input")
+
+    def start_resume_refinement(self) -> None:
+        self.dispatch_slash("/refine resume")
 
     def action_show_chat(self) -> None:
         self.show_view("chat")

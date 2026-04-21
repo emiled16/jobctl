@@ -21,6 +21,9 @@ _KIND_LABELS = {
     "rephrase": "Rephrases",
     "connect": "Connections",
     "prune": "Prunes",
+    "add_fact": "Resume facts",
+    "update_fact": "Resume updates",
+    "refine_experience": "Refinements",
 }
 
 

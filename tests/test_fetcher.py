@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 from jobctl.jobs import fetcher
 from jobctl.llm.schemas import ExtractedJD
@@ -119,6 +120,51 @@ def test_fetch_and_parse_jd_treats_non_url_as_pasted_text(monkeypatch) -> None:
 
     assert jd.title == "Senior Engineer"
     assert "Senior Engineer pasted JD" in jd.raw_text
+
+
+def test_extracted_jd_coerces_null_values_from_noisy_pages() -> None:
+    jd = ExtractedJD.model_validate(
+        {
+            "title": None,
+            "company": "Acme",
+            "location": None,
+            "compensation": None,
+            "requirements": None,
+            "responsibilities": None,
+            "qualifications": [],
+            "nice_to_haves": [],
+            "raw_text": None,
+        }
+    )
+
+    assert jd.title == ""
+    assert jd.location == ""
+    assert jd.raw_text == ""
+    assert jd.requirements == []
+    assert jd.responsibilities == []
+
+
+def test_extract_jd_raises_when_page_has_no_usable_content() -> None:
+    class _EmptyClient:
+        def chat_structured(self, messages: list[dict], response_format: type) -> ExtractedJD:
+            return ExtractedJD.model_validate(
+                {
+                    "title": None,
+                    "company": None,
+                    "location": None,
+                    "compensation": None,
+                    "requirements": None,
+                    "responsibilities": None,
+                    "qualifications": None,
+                    "nice_to_haves": None,
+                    "raw_text": None,
+                }
+            )
+
+    html = "<html><body><main>Gated content; nothing useful here.</main></body></html>"
+
+    with pytest.raises(ValueError, match="paste the full job description"):
+        fetcher.extract_jd(html, _EmptyClient())
 
 
 def _html_with_visible_text(text: str, repeat: int) -> str:

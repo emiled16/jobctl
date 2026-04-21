@@ -15,6 +15,7 @@ _SLASH_TO_NODE = {
     "/ingest": "ingest_node",
     "/curate": "curate_node",
     "/apply": "apply_node",
+    "/refine resume": "refinement_node",
 }
 
 
@@ -37,6 +38,11 @@ def route(state: AgentState) -> str:
             return "ingest_node"
         if workflow_request["kind"] == "apply":
             return "apply_node"
+        if workflow_request["kind"] == "resume_refinement":
+            return "refinement_node"
+
+    if state.get("refinement_session"):
+        return "refinement_node"
 
     last_user = _last_user_message(state).strip()
     lowered = last_user.lower()

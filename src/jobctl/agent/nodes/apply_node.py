@@ -8,6 +8,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from jobctl.agent.state import AgentState, workflow_request_from_state
 from jobctl.config import JobctlConfig
 from jobctl.core.events import AgentDoneEvent, AsyncEventBus
@@ -68,20 +70,74 @@ def _extract_url_or_text(state: AgentState) -> str | None:
 
 
 def _build_shim(provider: LLMProvider) -> Any:
+    """Adapt an ``LLMProvider`` to the ``chat_structured`` interface used by the Apply pipeline.
+
+    We prefer the provider's native ``chat_structured`` (e.g. OpenAI
+    structured outputs via ``response_format=...``) because it reliably returns
+    complete JSON matching the schema. If the provider refuses the schema
+    (e.g. OpenAI strict-mode rejects optional fields or open-ended dicts
+    like ``ResumeYAML``), we fall back to asking the model for plain JSON
+    and validating with Pydantic.
+    """
     import json as _json
+
+    def _invalid_payload(response_format: type, exc: Exception) -> ValueError:
+        return ValueError(
+            f"Could not extract a valid {response_format.__name__}. "
+            "If this was a gated job page, paste the full job description text instead. "
+            f"Validation error: {exc}"
+        )
+
+    def _json_fallback(messages, response_format):
+        schema_hint = _json.dumps(response_format.model_json_schema(), sort_keys=True)
+        hinted_messages = list(messages) + [
+            {
+                "role": "system",
+                "content": (
+                    "Respond with a single JSON object that conforms to this JSON schema. "
+                    "Do not include any prose, code fences, or commentary. "
+                    "Use empty strings or empty arrays when a value is unknown.\n"
+                    f"{schema_hint}"
+                ),
+            }
+        ]
+        response = provider.chat(hinted_messages)
+        content = (response.get("content") or "").strip()
+        content = _strip_code_fence(content)
+        try:
+            payload = _json.loads(content) if content else {}
+        except _json.JSONDecodeError:
+            payload = {}
+        try:
+            return response_format.model_validate(payload)
+        except ValidationError as exc:
+            raise _invalid_payload(response_format, exc) from exc
 
     class _Shim:
         def chat(self, messages, **kwargs):
             return provider.chat(messages, **kwargs)
 
         def chat_structured(self, messages, response_format):
-            response = provider.chat(messages)
-            content = response.get("content") or "{}"
-            try:
-                payload = _json.loads(content)
-            except _json.JSONDecodeError:
-                payload = {}
-            return response_format.model_validate(payload)
+            if hasattr(provider, "chat_structured"):
+                try:
+                    return provider.chat_structured(  # type: ignore[attr-defined]
+                        list(messages), response_format=response_format
+                    )
+                except ValidationError as exc:
+                    raise _invalid_payload(response_format, exc) from exc
+                except Exception as exc:  # noqa: BLE001
+                    # Provider refused the schema (e.g. OpenAI strict mode
+                    # rejects optional fields or open-ended dicts). Fall back
+                    # to plain chat + JSON parsing so complex generation
+                    # schemas like ResumeYAML still work.
+                    logger.warning(
+                        "Structured output failed for %s; falling back to JSON chat. Reason: %s",
+                        response_format.__name__,
+                        exc,
+                    )
+                    return _json_fallback(messages, response_format)
+
+            return _json_fallback(messages, response_format)
 
         def get_embedding(self, text: str) -> list[float]:
             return provider.embed([text])[0]
@@ -90,6 +146,19 @@ def _build_shim(provider: LLMProvider) -> Any:
             return provider.embed(texts)
 
     return _Shim()
+
+
+def _strip_code_fence(content: str) -> str:
+    """Remove a leading ```json / ``` fence and trailing ``` if present."""
+    if not content.startswith("```"):
+        return content
+    lines = content.splitlines()
+    if len(lines) < 2:
+        return content
+    lines = lines[1:]
+    if lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
 
 
 def start_apply(

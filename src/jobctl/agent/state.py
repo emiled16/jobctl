@@ -6,8 +6,8 @@ from typing import Any, Literal, TypedDict
 
 from jobctl.llm.base import Message
 
-AgentMode = Literal["chat", "ingest", "curate", "apply", "graph_qa"]
-WorkflowKind = Literal["resume_ingest", "github_ingest", "apply"]
+AgentMode = Literal["chat", "ingest", "curate", "apply", "graph_qa", "refinement"]
+WorkflowKind = Literal["resume_ingest", "github_ingest", "apply", "resume_refinement"]
 
 
 class Confirmation(TypedDict, total=False):
@@ -29,6 +29,15 @@ class WorkflowRequest(TypedDict):
     payload: dict[str, Any]
 
 
+class RefinementSession(TypedDict, total=False):
+    pending_question_ids: list[str]
+    current_index: int
+    source_ref: str
+    started_from: Literal["ingestion", "resume"]
+    pending_update_plan: dict[str, Any]
+    pending_answer: str
+
+
 class AgentState(TypedDict, total=False):
     messages: list[Message]
     mode: AgentMode
@@ -36,6 +45,7 @@ class AgentState(TypedDict, total=False):
     coverage: Coverage | None
     last_tool_result: dict[str, Any] | None
     session_id: str
+    refinement_session: RefinementSession | None
 
 
 def new_state(session_id: str) -> AgentState:
@@ -47,7 +57,45 @@ def new_state(session_id: str) -> AgentState:
         coverage=None,
         last_tool_result=None,
         session_id=session_id,
+        refinement_session=None,
     )
+
+
+def start_refinement_session(
+    state: AgentState,
+    question_ids: list[str],
+    *,
+    source_ref: str = "",
+    started_from: Literal["ingestion", "resume"] = "resume",
+) -> AgentState:
+    state["refinement_session"] = {
+        "pending_question_ids": list(question_ids),
+        "current_index": 0,
+        "source_ref": source_ref,
+        "started_from": started_from,
+    }
+    state["mode"] = "refinement"
+    return state
+
+
+def advance_refinement_session(state: AgentState) -> AgentState:
+    session = state.get("refinement_session")
+    if not session:
+        return state
+    session["current_index"] = int(session.get("current_index") or 0) + 1
+    session.pop("pending_update_plan", None)
+    session.pop("pending_answer", None)
+    if session["current_index"] >= len(session.get("pending_question_ids") or []):
+        return clear_refinement_session(state)
+    state["refinement_session"] = session
+    state["mode"] = "refinement"
+    return state
+
+
+def clear_refinement_session(state: AgentState) -> AgentState:
+    state["refinement_session"] = None
+    state["mode"] = "chat"
+    return state
 
 
 def make_workflow_request(
@@ -67,7 +115,7 @@ def workflow_request_from_state(state: AgentState) -> WorkflowRequest | None:
     if not isinstance(candidate, dict):
         return None
     kind = candidate.get("kind")
-    if kind not in ("resume_ingest", "github_ingest", "apply"):
+    if kind not in ("resume_ingest", "github_ingest", "apply", "resume_refinement"):
         return None
     request_payload = candidate.get("payload")
     if not isinstance(request_payload, dict):
@@ -86,10 +134,14 @@ __all__ = [
     "AgentState",
     "Confirmation",
     "Coverage",
+    "RefinementSession",
     "WorkflowKind",
     "WorkflowRequest",
     "make_workflow_request",
     "new_state",
+    "advance_refinement_session",
+    "clear_refinement_session",
+    "start_refinement_session",
     "store_workflow_request",
     "workflow_request_from_state",
 ]

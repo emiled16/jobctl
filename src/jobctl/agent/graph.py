@@ -14,6 +14,7 @@ from jobctl.agent.nodes.confirm_node import wait_for_confirmation_node
 from jobctl.agent.nodes.curate_node import curate_node
 from jobctl.agent.nodes.graph_qa_node import graph_qa_node
 from jobctl.agent.nodes.ingest_node import ingest_node
+from jobctl.agent.nodes.refinement_node import refinement_node
 from jobctl.agent.router import route
 from jobctl.agent.state import AgentState
 from jobctl.config import JobctlConfig
@@ -66,6 +67,11 @@ def build_graph(
     graph.add_node("wait_for_confirmation", _wait)
     graph.add_node("ingest_node", _ingest)
 
+    def _refinement(state: AgentState) -> AgentState:
+        return refinement_node(state, provider=provider, conn=conn, bus=bus)
+
+    graph.add_node("refinement_node", _refinement)
+
     def _curate(state: AgentState) -> AgentState:
         proposal_store_local = proposal_store or CurationProposalStore(conn)
         return curate_node(
@@ -101,6 +107,7 @@ def build_graph(
             "graph_qa_node": "graph_qa_node",
             "wait_for_confirmation": "wait_for_confirmation",
             "ingest_node": "ingest_node",
+            "refinement_node": "refinement_node",
             "curate_node": "curate_node",
             "apply_node": "apply_node",
         },
@@ -109,6 +116,7 @@ def build_graph(
     graph.add_edge("graph_qa_node", END)
     graph.add_edge("wait_for_confirmation", END)
     graph.add_edge("ingest_node", END)
+    graph.add_edge("refinement_node", END)
     graph.add_edge("curate_node", END)
     graph.add_edge("apply_node", END)
 
