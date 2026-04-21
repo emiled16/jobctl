@@ -184,7 +184,7 @@
           <h2>{{ section.title }}</h2>
           {% for entry in section.content %}
             <div class="entry">
-              <p><span class="education-degree">{{ entry.degree }}{% if entry.field %} in {{ entry.field }}{% endif %}</span>, {{ entry.institution }}{% if entry.end_date %} <span class="date">| {{ entry.end_date }}</span>{% endif %}</p>
+              <p><span class="education-degree">{{ entry.degree }}{% if entry.field %} in {{ entry.field }}{% endif %}</span>, {{ entry.institution }}{% if entry.start_date and entry.end_date %} <span class="date">| {{ entry.start_date }} &ndash; {{ entry.end_date }}</span>{% elif entry.start_date %} <span class="date">| {{ entry.start_date }} &ndash; Present</span>{% elif entry.end_date %} <span class="date">| {{ entry.end_date }}</span>{% endif %}</p>
               {% if entry.details %}
                 <ul>{% for detail in entry.details %}<li>{{ detail }}</li>{% endfor %}</ul>
               {% endif %}
@@ -217,6 +217,21 @@
               <li>{{ certification }}</li>
             {% endfor %}
           </ul>
+        </section>
+      {% elif section.kind == "other" %}
+        <section>
+          <h2>{{ section.title }}</h2>
+          {% if section.content is mapping %}
+            {% for category, values in section.content.items() %}
+              <p class="skill-category"><strong>{{ category | replace("_", " ") | title }}:</strong> {% if values is string %}{{ values }}{% else %}{{ values | join(", ") }}{% endif %}</p>
+            {% endfor %}
+          {% else %}
+            <ul class="compact-list">
+              {% for item in section.content %}
+                <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
         </section>
       {% endif %}
     {% endfor %}
