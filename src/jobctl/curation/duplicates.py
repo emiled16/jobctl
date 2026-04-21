@@ -6,12 +6,12 @@ name matching (``difflib``) to propose merge candidates.
 
 from __future__ import annotations
 
-import json
-import math
 import sqlite3
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, Sequence
+
+from jobctl.rag.store import VectorFilter, VectorStore
 
 __all__ = ["DuplicateCandidate", "find_duplicate_candidates"]
 
@@ -23,48 +23,6 @@ class DuplicateCandidate:
     cosine_similarity: float
     name_similarity: float
     reason: str
-
-
-def _load_embeddings(conn: sqlite3.Connection) -> list[tuple[str, list[float]]]:
-    """Load ``(node_id, vector)`` pairs regardless of the storage backend."""
-    row = conn.execute(
-        """
-        SELECT sql FROM sqlite_schema WHERE name = 'node_embeddings'
-        """
-    ).fetchone()
-    using_vec = bool(row and row[0] and "USING VEC0" in row[0].upper())
-
-    if using_vec:
-        try:
-            import sqlite_vec  # lazy
-
-            rows = conn.execute("SELECT node_id, embedding FROM node_embeddings").fetchall()
-            pairs: list[tuple[str, list[float]]] = []
-            for r in rows:
-                node_id, raw = r[0], r[1]
-                try:
-                    vector = list(sqlite_vec.deserialize_float32(raw))
-                except Exception:
-                    # Newer sqlite-vec stores in binary; fall back to json if present.
-                    try:
-                        vector = list(json.loads(raw))
-                    except Exception:
-                        continue
-                pairs.append((node_id, vector))
-            return pairs
-        except Exception:
-            pass
-
-    rows = conn.execute("SELECT node_id, embedding FROM node_embeddings").fetchall()
-    pairs = []
-    for r in rows:
-        node_id, raw = r[0], r[1]
-        try:
-            vector = list(json.loads(raw))
-        except Exception:
-            continue
-        pairs.append((node_id, vector))
-    return pairs
 
 
 def _load_nodes_by_id(
@@ -92,27 +50,14 @@ def _load_nodes_by_id(
     }
 
 
-def _cosine(a: list[float], b: list[float]) -> float:
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = 0.0
-    na = 0.0
-    nb = 0.0
-    for x, y in zip(a, b):
-        dot += x * y
-        na += x * x
-        nb += y * y
-    if na == 0.0 or nb == 0.0:
-        return 0.0
-    return dot / (math.sqrt(na) * math.sqrt(nb))
-
-
 def _name_similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, (a or "").lower(), (b or "").lower()).ratio()
 
 
 def find_duplicate_candidates(
     conn: sqlite3.Connection,
+    vector_store: VectorStore,
+    embedding_client: Any,
     *,
     cosine_threshold: float = 0.92,
     fuzzy_threshold: float = 0.85,
@@ -124,28 +69,53 @@ def find_duplicate_candidates(
     are returned (up to ``max_candidates``).
     """
 
-    embeddings = _load_embeddings(conn)
-    if not embeddings:
+    rows = conn.execute(
+        """
+        SELECT id, type, name, text_representation
+        FROM nodes
+        WHERE text_representation IS NOT NULL
+        ORDER BY updated_at DESC
+        """
+    ).fetchall()
+    if not rows:
         return []
 
-    node_ids = [node_id for node_id, _ in embeddings]
+    node_ids = [row["id"] for row in rows]
     node_lookup = _load_nodes_by_id(conn, node_ids)
 
     candidates: list[DuplicateCandidate] = []
-    count = len(embeddings)
-    for i in range(count):
-        id_a, vec_a = embeddings[i]
+    seen_pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        id_a = row["id"]
         node_a = node_lookup.get(id_a)
         if node_a is None:
             continue
-        for j in range(i + 1, count):
-            id_b, vec_b = embeddings[j]
+        try:
+            embedding = embedding_client.get_embedding(row["text_representation"])
+        except AttributeError:
+            embedding = embedding_client.embed([row["text_representation"]])[0]
+        except Exception:
+            continue
+        try:
+            hits = vector_store.search(
+                embedding,
+                top_k=12,
+                filters=VectorFilter(node_type=node_a["type"]),
+            )
+        except Exception:
+            hits = []
+        for hit in hits:
+            id_b = hit.node_id
+            if id_a == id_b:
+                continue
+            pair = tuple(sorted((id_a, id_b)))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
             node_b = node_lookup.get(id_b)
             if node_b is None:
                 continue
-            if node_a["type"] != node_b["type"]:
-                continue
-            cos = _cosine(vec_a, vec_b)
+            cos = float(hit.score)
             name = _name_similarity(node_a["name"] or "", node_b["name"] or "")
             if cos < cosine_threshold and name < fuzzy_threshold:
                 continue

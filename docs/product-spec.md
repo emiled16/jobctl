@@ -18,7 +18,7 @@ Technical users (engineers, data scientists) comfortable with the terminal.
 | Embeddings|  OpenAI text-embedding-3-small or 3-large|
 | TUI|  Textual|
 | Knowledge Graph| SQLite (nodes/edges tables)|
-| Vector Storage|  sqlite-vec (virtual table in same SQLite DB)|
+| Vector Storage|  Qdrant local mode under `.jobctl/qdrant/`|
 | PDF Generation|  HTML/CSS template + WeasyPrint or Playwright|
 | GitHub Ingestion|  PyGitHub or gitingest|
 | Job Fetching| httpx with Playwright fallback|
@@ -56,7 +56,7 @@ my-job-search/
 
 `worked_at`, `held_role`, `used_skill`, `led_project`, `achieved`, `studied_at`, `collaborated_on`, `reported_to`, etc.
 
-Retrieval uses both structural graph queries (filter by type, relationship traversal) and vector similarity search (semantic matching of JD requirements against node embeddings via sqlite-vec).
+Retrieval uses both structural graph queries (filter by type, relationship traversal) and vector similarity search through Qdrant.
 
 ## Modes of Operation
 1. **Onboarding Mode (jobctl onboard)**
@@ -137,7 +137,7 @@ User provides URL
 - jobctl init, onboard, yap, apply, track, profile, render, config
 - Resume ingestion (file or paste)
 - GitHub repo ingestion (metadata + README + key files via API)
-- Knowledge graph with embeddings in SQLite + sqlite-vec
+- Knowledge graph in SQLite with embeddings indexed in Qdrant
 - JD fetching (httpx + Playwright fallback + paste fallback)
 - Fit evaluation with score and gap analysis
 - Tailored, ATS-optimized resume generation (YAML -> review -> PDF)

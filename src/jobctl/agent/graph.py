@@ -23,6 +23,7 @@ from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.curation.proposals import CurationProposalStore
 from jobctl.llm.base import LLMProvider
+from jobctl.rag.store import VectorStore
 
 
 def build_graph(
@@ -35,6 +36,7 @@ def build_graph(
     proposal_store: CurationProposalStore | None = None,
     config: JobctlConfig | None = None,
     db_path: Path | None = None,
+    vector_store: VectorStore | None = None,
 ) -> Any:
     """Return a compiled LangGraph graph bound to the given dependencies."""
 
@@ -42,7 +44,9 @@ def build_graph(
         return chat_node(state, provider=provider, bus=bus)
 
     def _graph_qa(state: AgentState) -> AgentState:
-        return graph_qa_node(state, provider=provider, conn=conn, bus=bus)
+        if vector_store is None:
+            return chat_node(state, provider=provider, bus=bus)
+        return graph_qa_node(state, provider=provider, conn=conn, vector_store=vector_store, bus=bus)
 
     async def _wait(state: AgentState) -> AgentState:
         return await wait_for_confirmation_node(state, bus=bus)
@@ -59,6 +63,8 @@ def build_graph(
             runner=runner,
             bus=bus,
             db_path=db_path,
+            config=config,
+            vector_store=vector_store,
         )
 
     graph: StateGraph[AgentState] = StateGraph(AgentState)
@@ -68,11 +74,21 @@ def build_graph(
     graph.add_node("ingest_node", _ingest)
 
     def _refinement(state: AgentState) -> AgentState:
-        return refinement_node(state, provider=provider, conn=conn, bus=bus)
+        if vector_store is None:
+            return chat_node(state, provider=provider, bus=bus)
+        return refinement_node(
+            state,
+            provider=provider,
+            conn=conn,
+            vector_store=vector_store,
+            bus=bus,
+        )
 
     graph.add_node("refinement_node", _refinement)
 
     def _curate(state: AgentState) -> AgentState:
+        if vector_store is None:
+            return chat_node(state, provider=provider, bus=bus)
         proposal_store_local = proposal_store or CurationProposalStore(conn)
         return curate_node(
             state,
@@ -80,6 +96,7 @@ def build_graph(
             conn=conn,
             proposal_store=proposal_store_local,
             bus=bus,
+            vector_store=vector_store,
         )
 
     graph.add_node("curate_node", _curate)
@@ -96,6 +113,7 @@ def build_graph(
             runner=runner,
             bus=bus,
             db_path=db_path,
+            vector_store=vector_store,
         )
 
     graph.add_node("apply_node", _apply)

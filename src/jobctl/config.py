@@ -14,6 +14,9 @@ CONFIG_DIR_NAME = ".jobctl"
 CONFIG_FILE_NAME = "config.yaml"
 
 VALID_PROVIDERS = ("openai", "ollama", "codex")
+VALID_VECTOR_PROVIDERS = ("qdrant",)
+VALID_VECTOR_MODES = ("local", "remote")
+VALID_VECTOR_DISTANCES = ("cosine", "dot", "euclid")
 
 
 class ConfigError(Exception):
@@ -49,8 +52,20 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class VectorStoreConfig:
+    provider: str = "qdrant"
+    mode: str = "local"
+    path: str = ".jobctl/qdrant"
+    url: str = ""
+    api_key_env: str = "QDRANT_API_KEY"
+    collection: str = "jobctl_nodes"
+    distance: str = "cosine"
+
+
+@dataclass(frozen=True)
 class JobctlConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
+    vector_store: VectorStoreConfig = field(default_factory=VectorStoreConfig)
     default_template: str = "emile-resume.html"
 
     # Backward-compatibility shims for the v1 flat keys. New code should
@@ -209,9 +224,49 @@ def _validate_config(raw: dict[str, Any]) -> JobctlConfig:
         ollama=ollama_cfg,
     )
 
+    vector_raw = raw.get("vector_store") or {}
+    if not isinstance(vector_raw, dict):
+        raise ConfigValidationError("vector_store block must be a mapping")
+    vector_provider = str(vector_raw.get("provider") or "qdrant")
+    if vector_provider not in VALID_VECTOR_PROVIDERS:
+        raise ConfigValidationError(
+            f"vector_store.provider must be one of {VALID_VECTOR_PROVIDERS!r}, "
+            f"got {vector_provider!r}"
+        )
+    vector_mode = str(vector_raw.get("mode") or "local")
+    if vector_mode not in VALID_VECTOR_MODES:
+        raise ConfigValidationError(
+            f"vector_store.mode must be one of {VALID_VECTOR_MODES!r}, got {vector_mode!r}"
+        )
+    vector_path = str(vector_raw.get("path") or ".jobctl/qdrant")
+    vector_url = str(vector_raw.get("url") or "")
+    if vector_mode == "local" and not vector_path:
+        raise ConfigValidationError("vector_store.path is required when mode is local")
+    if vector_mode == "remote" and not vector_url:
+        raise ConfigValidationError("vector_store.url is required when mode is remote")
+    vector_distance = str(vector_raw.get("distance") or "cosine").lower()
+    if vector_distance not in VALID_VECTOR_DISTANCES:
+        raise ConfigValidationError(
+            f"vector_store.distance must be one of {VALID_VECTOR_DISTANCES!r}, "
+            f"got {vector_distance!r}"
+        )
+    vector_cfg = VectorStoreConfig(
+        provider=vector_provider,
+        mode=vector_mode,
+        path=vector_path,
+        url=vector_url,
+        api_key_env=str(vector_raw.get("api_key_env") or "QDRANT_API_KEY"),
+        collection=str(vector_raw.get("collection") or "jobctl_nodes"),
+        distance=vector_distance,
+    )
+
     default_template = str(raw.get("default_template") or "emile-resume.html")
 
-    return JobctlConfig(llm=llm_cfg, default_template=default_template)
+    return JobctlConfig(
+        llm=llm_cfg,
+        vector_store=vector_cfg,
+        default_template=default_template,
+    )
 
 
 def config_field_names() -> tuple[str, ...]:
@@ -223,5 +278,12 @@ def config_field_names() -> tuple[str, ...]:
         "llm.openai.api_key_env",
         "llm.ollama.host",
         "llm.ollama.embedding_model",
+        "vector_store.provider",
+        "vector_store.mode",
+        "vector_store.path",
+        "vector_store.url",
+        "vector_store.api_key_env",
+        "vector_store.collection",
+        "vector_store.distance",
         "default_template",
     )

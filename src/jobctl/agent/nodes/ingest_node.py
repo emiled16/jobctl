@@ -12,7 +12,10 @@ from jobctl.core.events import AgentDoneEvent, AsyncEventBus, IngestDoneEvent
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.db.connection import get_connection
+from jobctl.config import JobctlConfig
 from jobctl.llm.base import LLMProvider, Message
+from jobctl.rag.factory import create_vector_store
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,8 @@ def start_resume_ingest(
     store: BackgroundJobStore,
     runner: BackgroundJobRunner,
     resume_path: Path,
+    config: JobctlConfig | None = None,
+    vector_store: VectorStore | None = None,
     db_path: Path | None = None,
 ) -> str:
     """Kick off a resume ingest in the background; return the job id."""
@@ -47,11 +52,16 @@ def start_resume_ingest(
 
         worker_conn = conn
         worker_store = store
+        worker_vector_store = vector_store
         if db_path is not None:
             worker_conn = get_connection(db_path)
             worker_store = BackgroundJobStore(worker_conn)
+            if config is not None:
+                worker_vector_store = create_vector_store(config, db_path.parent.parent)
 
         try:
+            if worker_vector_store is None:
+                raise ValueError("Vector store is not configured")
 
             class _Shim:
                 def chat_structured(self, messages, response_format):
@@ -73,6 +83,8 @@ def start_resume_ingest(
                 worker_conn,
                 resume_path,
                 shim,
+                vector_store=worker_vector_store,
+                config=config,
                 bus=bus,
                 store=worker_store,
                 job_id=job_id,
@@ -94,6 +106,8 @@ def start_resume_ingest(
             return summary
         finally:
             if db_path is not None:
+                if worker_vector_store is not None:
+                    worker_vector_store.close()
                 worker_conn.close()
 
     runner.submit(job_id, _do_ingest, source="resume", label=f"Resume ingest: {resume_path.name}")
@@ -109,6 +123,8 @@ def start_github_ingest(
     runner: BackgroundJobRunner,
     username_or_urls: list[str],
     preselected_repos: list[tuple[str, str]] | None = None,
+    config: JobctlConfig | None = None,
+    vector_store: VectorStore | None = None,
     db_path: Path | None = None,
 ) -> str:
     job_id = store.create_job(
@@ -125,11 +141,16 @@ def start_github_ingest(
 
         worker_conn = conn
         worker_store = store
+        worker_vector_store = vector_store
         if db_path is not None:
             worker_conn = get_connection(db_path)
             worker_store = BackgroundJobStore(worker_conn)
+            if config is not None:
+                worker_vector_store = create_vector_store(config, db_path.parent.parent)
 
         try:
+            if worker_vector_store is None:
+                raise ValueError("Vector store is not configured")
 
             class _Shim:
                 def chat_structured(self, messages, response_format):
@@ -155,10 +176,14 @@ def start_github_ingest(
                 store=worker_store,
                 job_id=job_id,
                 preselected_repos=preselected_repos,
+                vector_store=worker_vector_store,
+                config=config,
             )
             return {"facts_added": added}
         finally:
             if db_path is not None:
+                if worker_vector_store is not None:
+                    worker_vector_store.close()
                 worker_conn.close()
 
     runner.submit(job_id, _do_ingest, source="github", label="GitHub ingest")
@@ -174,6 +199,8 @@ def ingest_node(
     runner: BackgroundJobRunner,
     bus: AsyncEventBus,
     db_path: Path | None = None,
+    config: JobctlConfig | None = None,
+    vector_store: VectorStore | None = None,
 ) -> AgentState:
     """Route ingest requests from ``state.last_tool_result`` into background jobs."""
     payload = state.get("last_tool_result") or {}
@@ -213,6 +240,8 @@ def ingest_node(
             store=store,
             runner=runner,
             resume_path=path,
+            config=config,
+            vector_store=vector_store,
             db_path=db_path,
         )
         state["last_tool_result"] = None
@@ -244,6 +273,8 @@ def ingest_node(
             runner=runner,
             username_or_urls=usernames,
             preselected_repos=preselected,
+            config=config,
+            vector_store=vector_store,
             db_path=db_path,
         )
         state["last_tool_result"] = None

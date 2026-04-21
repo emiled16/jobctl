@@ -8,6 +8,7 @@ import typer
 from jobctl.app.common import run_tui
 from jobctl.app.config import app as config_app
 from jobctl.app.init import app as init_app
+from jobctl.app.rag import app as rag_app
 from jobctl.app.renderer import app as renderer_app
 
 app = typer.Typer(
@@ -45,6 +46,7 @@ def root(
 app.add_typer(init_app, name="init")
 app.add_typer(config_app, name="config")
 app.add_typer(renderer_app, name="render")
+app.add_typer(rag_app, name="rag")
 
 main = typer.main.get_command(app)
 main.name = "jobctl"

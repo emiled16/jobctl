@@ -21,6 +21,7 @@ from jobctl.ingestion.enrichment import (
 from jobctl.ingestion.questions import RefinementQuestionStore
 from jobctl.ingestion.schemas import GraphUpdatePlan
 from jobctl.llm.base import LLMProvider, Message
+from jobctl.rag.store import VectorStore
 
 
 def refinement_node(
@@ -28,6 +29,7 @@ def refinement_node(
     *,
     provider: LLMProvider,
     conn: sqlite3.Connection,
+    vector_store: VectorStore,
     bus: AsyncEventBus,
 ) -> AgentState:
     store = RefinementQuestionStore(conn)
@@ -69,6 +71,7 @@ def refinement_node(
             conn=conn,
             bus=bus,
             store=store,
+            vector_store=vector_store,
         )
 
     question_ids = session.get("pending_question_ids") or []
@@ -128,6 +131,7 @@ def _handle_pending_update_review(
     conn: sqlite3.Connection,
     bus: AsyncEventBus,
     store: RefinementQuestionStore,
+    vector_store: VectorStore,
 ) -> AgentState:
     session = state.get("refinement_session") or {}
     answer = _last_user_message(state).strip().casefold()
@@ -147,7 +151,11 @@ def _handle_pending_update_review(
         plan = GraphUpdatePlan.model_validate(session["pending_update_plan"])
         shim = _ProviderShim(provider)
         apply_graph_update_plan(
-            conn, plan, shim, plan.source_ref or session.get("source_ref") or ""
+            conn,
+            plan,
+            shim,
+            plan.source_ref or session.get("source_ref") or "",
+            vector_store=vector_store,
         )
         if question_id:
             pending_answer = str(session.get("pending_answer") or "")

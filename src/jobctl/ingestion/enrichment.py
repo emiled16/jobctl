@@ -9,10 +9,12 @@ from difflib import unified_diff
 from typing import Any
 
 from jobctl.curation.proposals import CurationProposalStore
+from jobctl.config import JobctlConfig
 from jobctl.db.graph import add_node_source, get_node, merge_node_properties, update_node
-from jobctl.db.vectors import embed_node
 from jobctl.ingestion.resume import persist_reconciled_resume_facts
 from jobctl.ingestion.schemas import GraphUpdatePlan, RefinementQuestion, ResumeReconciliationResult
+from jobctl.rag.indexing import index_node
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,9 @@ def apply_graph_update_plan(
     plan: GraphUpdatePlan,
     llm_client: Any,
     source_ref: str,
+    *,
+    vector_store: VectorStore,
+    config: JobctlConfig | None = None,
 ) -> dict[str, int]:
     if plan.requires_review:
         CurationProposalStore(conn).create_proposal("refine_experience", plan.model_dump())
@@ -93,10 +98,12 @@ def apply_graph_update_plan(
         )
         if llm_client is not None and hasattr(llm_client, "get_embedding"):
             try:
-                embed_node(conn, plan.target_node_id, llm_client)
+                index_node(conn, vector_store, plan.target_node_id, llm_client, config=config)
             except Exception as exc:  # noqa: BLE001 - graph update already succeeded
                 logger.warning(
-                    "Skipping refinement embedding for node %s: %s", plan.target_node_id, exc
+                    "Skipping refinement vector index for node %s: %s",
+                    plan.target_node_id,
+                    exc,
                 )
         updated += 1
 
@@ -117,7 +124,12 @@ def apply_graph_update_plan(
             ],
         )
         facts_added = persist_reconciled_resume_facts(
-            conn, reconciliation, llm_client, source_ref
+            conn,
+            reconciliation,
+            llm_client,
+            source_ref,
+            vector_store=vector_store,
+            config=config,
         ).get("added", 0)
     return {"nodes_updated": updated, "facts_added": facts_added, "proposals_created": 0}
 

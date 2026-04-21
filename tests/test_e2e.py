@@ -19,6 +19,7 @@ class FakeLLMClient:
 def test_init_resume_ingestion_apply_flow(
     tmp_path: Path,
     monkeypatch,
+    fake_vector_store,
 ) -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as isolated_dir:
@@ -40,6 +41,7 @@ def test_init_resume_ingestion_apply_flow(
                 ],
                 FakeLLMClient(),
                 interactive=False,
+                vector_store=fake_vector_store,
             )
             assert search_nodes(conn, type="skill", name_contains="Python")
 
@@ -76,7 +78,13 @@ def test_init_resume_ingestion_apply_flow(
                 lambda _yaml_path, _template_name, output_path: write_file(output_path, b"%PDF"),
             )
 
-            app_id = apply_pipeline.run_apply(conn, "Senior Engineer JD", object(), object())
+            app_id = apply_pipeline.run_apply(
+                conn,
+                "Senior Engineer JD",
+                object(),
+                object(),
+                fake_vector_store,
+            )
 
             application = get_application(conn, app_id)
             assert application["status"] == "materials_ready"

@@ -85,6 +85,7 @@ def test_background_runner_publishes_error_lifecycle(tmp_path: Path) -> None:
 def test_start_apply_uses_worker_thread_connection(
     tmp_path: Path,
     monkeypatch,
+    fake_vector_store,
 ) -> None:
     db_path = tmp_path / "jobctl.db"
     conn = get_connection(db_path)
@@ -110,6 +111,7 @@ def test_start_apply_uses_worker_thread_connection(
             store=store,
             runner=runner,
             config=default_config(),
+            vector_store=fake_vector_store,
             url_or_text="Senior Engineer JD",
             db_path=db_path,
         )
@@ -126,6 +128,7 @@ def test_start_apply_uses_worker_thread_connection(
 def test_start_apply_without_db_path_allows_worker_thread_db_access(
     tmp_path: Path,
     monkeypatch,
+    fake_vector_store,
 ) -> None:
     db_path = tmp_path / "jobctl.db"
     conn = get_connection(db_path)
@@ -148,6 +151,7 @@ def test_start_apply_without_db_path_allows_worker_thread_db_access(
             store=store,
             runner=runner,
             config=default_config(),
+            vector_store=fake_vector_store,
             url_or_text="Backend Engineer JD",
             db_path=None,
         )

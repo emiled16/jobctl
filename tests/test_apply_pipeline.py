@@ -50,6 +50,7 @@ def conn(project: Path) -> sqlite3.Connection:
 def test_run_apply_creates_materials_ready_tracker_entry(
     conn: sqlite3.Connection,
     monkeypatch: pytest.MonkeyPatch,
+    fake_vector_store,
 ) -> None:
     monkeypatch.setattr(apply_pipeline, "fetch_and_parse_jd", lambda _text, _client: make_jd())
     monkeypatch.setattr(
@@ -80,7 +81,13 @@ def test_run_apply_creates_materials_ready_tracker_entry(
         lambda _yaml_path, _template_name, output_path: _write_file(output_path, b"%PDF"),
     )
 
-    app_id = apply_pipeline.run_apply(conn, "Senior Engineer JD", object(), default_config())
+    app_id = apply_pipeline.run_apply(
+        conn,
+        "Senior Engineer JD",
+        object(),
+        default_config(),
+        fake_vector_store,
+    )
 
     application = get_application(conn, app_id)
     assert application["status"] == "materials_ready"
@@ -93,6 +100,7 @@ def test_run_apply_creates_materials_ready_tracker_entry(
 def test_run_apply_can_skip_material_generation(
     conn: sqlite3.Connection,
     monkeypatch: pytest.MonkeyPatch,
+    fake_vector_store,
 ) -> None:
     monkeypatch.setattr(apply_pipeline, "fetch_and_parse_jd", lambda _text, _client: make_jd())
     monkeypatch.setattr(
@@ -102,7 +110,13 @@ def test_run_apply_can_skip_material_generation(
     monkeypatch.setattr(apply_pipeline, "display_evaluation", lambda *_args: None)
     monkeypatch.setattr(apply_pipeline.Confirm, "ask", lambda *args, **kwargs: False)
 
-    app_id = apply_pipeline.run_apply(conn, "Senior Engineer JD", object(), default_config())
+    app_id = apply_pipeline.run_apply(
+        conn,
+        "Senior Engineer JD",
+        object(),
+        default_config(),
+        fake_vector_store,
+    )
 
     assert get_application(conn, app_id)["status"] == "evaluated"
 

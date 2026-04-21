@@ -20,9 +20,10 @@ from jobctl.db.graph import (
     get_node,
     update_node,
 )
-from jobctl.db.vectors import embed_node
 from jobctl.llm.adapter import as_embedding_client
 from jobctl.llm.base import LLMProvider
+from jobctl.rag.indexing import delete_node_document, index_node
+from jobctl.rag.store import VectorStore
 
 
 class DeleteNodeConfirmScreen(ModalScreen[bool]):
@@ -79,11 +80,13 @@ class GraphView(Vertical):
         conn: sqlite3.Connection,
         *,
         provider: LLMProvider | None = None,
+        vector_store: VectorStore,
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
         self.conn = conn
         self.provider = provider
+        self.vector_store = vector_store
         self.current_node_id: str | None = None
         self._type_filter: str = "all"
         self._search_term: str = ""
@@ -210,6 +213,7 @@ class GraphView(Vertical):
     def _delete_node_confirmed(self, node_id: str) -> None:
         try:
             delete_node(self.conn, node_id)
+            delete_node_document(self.vector_store, node_id)
         except Exception as exc:  # noqa: BLE001
             self.query_one("#graph-detail", Static).update(f"Delete failed: {exc}")
             return
@@ -331,7 +335,12 @@ class GraphView(Vertical):
         if self.provider is None:
             return
         try:
-            embed_node(self.conn, node_id, as_embedding_client(self.provider))
+            index_node(
+                self.conn,
+                self.vector_store,
+                node_id,
+                as_embedding_client(self.provider),
+            )
         except Exception:
-            # Embedding is best-effort; continue editing on failure.
+            # Vector indexing is best-effort; continue editing on failure.
             pass

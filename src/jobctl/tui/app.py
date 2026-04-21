@@ -18,6 +18,7 @@ from jobctl.core.events import AsyncEventBus
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.llm.base import LLMProvider
+from jobctl.rag.store import NoopVectorStore, VectorStore
 from jobctl.tui.widgets.command_palette import PaletteCommand
 
 
@@ -87,6 +88,7 @@ class JobctlApp(App):
         project_root: Path,
         config: JobctlConfig,
         provider: LLMProvider,
+        vector_store: VectorStore | None = None,
         bus: AsyncEventBus | None = None,
         job_store: BackgroundJobStore | None = None,
         job_runner: BackgroundJobRunner | None = None,
@@ -104,6 +106,7 @@ class JobctlApp(App):
         )
         self.config = config
         self.provider = provider
+        self.vector_store = vector_store or NoopVectorStore()
         self.bus = bus or AsyncEventBus()
         self.job_store = job_store or BackgroundJobStore(conn)
         self.job_runner = job_runner or BackgroundJobRunner(
@@ -136,10 +139,27 @@ class JobctlApp(App):
         with Horizontal(id="main-layout"):
             with ContentSwitcher(initial=self.start_screen, id="main-switcher"):
                 yield ChatView(self.bus, id="chat")
-                yield GraphView(self.conn, provider=self.provider, id="graph")
+                yield GraphView(
+                    self.conn,
+                    provider=self.provider,
+                    vector_store=self.vector_store,
+                    id="graph",
+                )
                 yield TrackerView(self.conn, id="tracker")
-                yield ApplyView(self.conn, self.provider, self.bus, id="apply")
-                yield CurateView(self.conn, self.job_runner, id="curate")
+                yield ApplyView(
+                    self.conn,
+                    self.provider,
+                    self.bus,
+                    vector_store=self.vector_store,
+                    id="apply",
+                )
+                yield CurateView(
+                    self.conn,
+                    self.job_runner,
+                    vector_store=self.vector_store,
+                    provider=self.provider,
+                    id="curate",
+                )
                 yield SettingsView(self.config, id="settings")
             with Vertical(id="sidebar"):
                 yield Label("Background jobs", id="sidebar-title")
@@ -189,6 +209,7 @@ class JobctlApp(App):
                 runner=self.job_runner,
                 config=self.config,
                 db_path=self.db_path,
+                vector_store=self.vector_store,
             )
         return self._runner
 

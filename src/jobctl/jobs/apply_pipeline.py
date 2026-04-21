@@ -30,6 +30,7 @@ from jobctl.generation.resume import generate_resume_yaml, save_and_review
 from jobctl.jobs.evaluator import display_evaluation, evaluate_fit, retrieve_relevant_experience
 from jobctl.jobs.fetcher import fetch_and_parse_jd
 from jobctl.jobs.tracker import create_application, update_application, update_status
+from jobctl.rag.store import VectorStore
 
 
 console = Console()
@@ -136,6 +137,7 @@ def run_apply(
     url_or_text: str,
     llm_client: Any,
     config: Any,
+    vector_store: VectorStore,
     *,
     bus: AsyncEventBus | None = None,
     confirm_fn: ConfirmFn | None = None,
@@ -154,7 +156,7 @@ def run_apply(
     jd = fetch_and_parse_jd(url_or_text, llm_client)
 
     _progress(bus, "retrieve", "Retrieving relevant experience", job_id=job_id)
-    relevant_experience = retrieve_relevant_experience(conn, jd, llm_client)
+    relevant_experience = retrieve_relevant_experience(conn, jd, llm_client, vector_store)
 
     _progress(bus, "evaluate", "Evaluating fit", job_id=job_id)
     evaluation = evaluate_fit(jd, relevant_experience, llm_client)

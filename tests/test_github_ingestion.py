@@ -123,7 +123,10 @@ def test_github_fetcher_raises_not_found() -> None:
         fetcher.get_user_repos("missing")
 
 
-def test_ingest_github_from_urls_persists_extracted_facts(conn: sqlite3.Connection) -> None:
+def test_ingest_github_from_urls_persists_extracted_facts(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     fetcher = FakeFetcher()
     llm_client = FakeLLMClient()
 
@@ -133,6 +136,7 @@ def test_ingest_github_from_urls_persists_extracted_facts(conn: sqlite3.Connecti
         llm_client,
         interactive=False,
         fetcher=fetcher,
+        vector_store=fake_vector_store,
     )
 
     assert persisted_count == 1
@@ -145,6 +149,7 @@ def test_ingest_github_from_urls_persists_extracted_facts(conn: sqlite3.Connecti
 
 def test_ingest_github_username_uses_all_repos_when_noninteractive(
     conn: sqlite3.Connection,
+    fake_vector_store,
 ) -> None:
     fetcher = FakeFetcher()
     llm_client = FakeLLMClient()
@@ -155,6 +160,7 @@ def test_ingest_github_username_uses_all_repos_when_noninteractive(
         llm_client,
         interactive=False,
         fetcher=fetcher,
+        vector_store=fake_vector_store,
     )
 
     assert persisted_count == 2
@@ -164,6 +170,7 @@ def test_ingest_github_username_uses_all_repos_when_noninteractive(
 
 def test_ingest_github_profile_url_uses_all_repos_when_noninteractive(
     conn: sqlite3.Connection,
+    fake_vector_store,
 ) -> None:
     fetcher = FakeFetcher()
     llm_client = FakeLLMClient()
@@ -174,6 +181,7 @@ def test_ingest_github_profile_url_uses_all_repos_when_noninteractive(
         llm_client,
         interactive=False,
         fetcher=fetcher,
+        vector_store=fake_vector_store,
     )
 
     assert persisted_count == 2
@@ -181,7 +189,10 @@ def test_ingest_github_profile_url_uses_all_repos_when_noninteractive(
     assert fetcher.usernames_requested == ["acme"]
 
 
-def test_ingest_github_mixes_profile_and_repo_urls(conn: sqlite3.Connection) -> None:
+def test_ingest_github_mixes_profile_and_repo_urls(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     fetcher = FakeFetcher()
     llm_client = FakeLLMClient()
 
@@ -191,6 +202,7 @@ def test_ingest_github_mixes_profile_and_repo_urls(conn: sqlite3.Connection) -> 
         llm_client,
         interactive=False,
         fetcher=fetcher,
+        vector_store=fake_vector_store,
     )
 
     assert persisted_count == 3

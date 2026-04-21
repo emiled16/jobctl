@@ -17,6 +17,8 @@ from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.core.jobs.store import BackgroundJobStore
 from jobctl.db.connection import get_connection
 from jobctl.llm.base import LLMProvider, Message
+from jobctl.rag.factory import create_vector_store
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +171,7 @@ def start_apply(
     store: BackgroundJobStore,
     runner: BackgroundJobRunner,
     config: JobctlConfig,
+    vector_store: VectorStore,
     url_or_text: str,
     db_path: Path | None = None,
 ) -> str:
@@ -183,15 +186,27 @@ def start_apply(
         from jobctl.jobs.apply_pipeline import run_apply
 
         worker_conn = conn
+        worker_vector_store = vector_store
         if db_path is not None:
             worker_conn = get_connection(db_path)
+            project_root = db_path.parent.parent
+            worker_vector_store = create_vector_store(config, project_root)
 
         try:
             shim = _build_shim(provider)
-            app_id = run_apply(worker_conn, url_or_text, shim, config, bus=bus, job_id=job_id)
+            app_id = run_apply(
+                worker_conn,
+                url_or_text,
+                shim,
+                config,
+                worker_vector_store,
+                bus=bus,
+                job_id=job_id,
+            )
             return {"app_id": app_id}
         finally:
             if db_path is not None:
+                worker_vector_store.close()
                 worker_conn.close()
 
     runner.submit(job_id, _do_apply, source="apply", label="Apply workflow")
@@ -208,6 +223,7 @@ def apply_node(
     runner: BackgroundJobRunner,
     bus: AsyncEventBus,
     db_path: Path | None = None,
+    vector_store: VectorStore | None = None,
 ) -> AgentState:
     """Launch a background apply flow based on the user's request."""
 
@@ -220,6 +236,8 @@ def apply_node(
         )
 
     try:
+        if vector_store is None:
+            raise ValueError("Vector store is not configured")
         job_id = start_apply(
             conn=conn,
             provider=provider,
@@ -227,6 +245,7 @@ def apply_node(
             store=store,
             runner=runner,
             config=config,
+            vector_store=vector_store,
             url_or_text=url_or_text,
             db_path=db_path,
         )

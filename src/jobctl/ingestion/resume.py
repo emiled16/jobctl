@@ -33,12 +33,14 @@ from jobctl.db.graph import (
     search_nodes,
     update_node,
 )
-from jobctl.db.vectors import embed_node
+from jobctl.config import JobctlConfig
 from jobctl.ingestion.questions import RefinementQuestionStore
 from jobctl.ingestion.reconcile import reconcile_resume_facts
 from jobctl.ingestion.refinement import persist_refinement_questions, plan_refinement_questions
 from jobctl.ingestion.schemas import FactReconciliation, ResumeReconciliationResult
 from jobctl.llm.schemas import ExtractedFact, ExtractedProfile
+from jobctl.rag.indexing import index_node
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +107,8 @@ def persist_facts(
     llm_client,
     interactive: bool = True,
     *,
+    vector_store: VectorStore,
+    config: JobctlConfig | None = None,
     bus: AsyncEventBus | None = None,
     store: BackgroundJobStore | None = None,
     job_id: str | None = None,
@@ -141,9 +145,15 @@ def persist_facts(
                 accepted_fact.properties,
                 accepted_fact.text_representation,
             )
-            _embed_node_best_effort(conn, node_id, llm_client)
+            _index_node_best_effort(conn, vector_store, node_id, llm_client, config=config)
 
-            related_node_id = _resolve_related_node(conn, accepted_fact, llm_client)
+            related_node_id = _resolve_related_node(
+                conn,
+                accepted_fact,
+                llm_client,
+                vector_store=vector_store,
+                config=config,
+            )
             if related_node_id is not None and accepted_fact.relation:
                 source_id, target_id = _edge_direction(
                     conn,
@@ -179,6 +189,8 @@ def persist_reconciled_resume_facts(
     store: BackgroundJobStore | None = None,
     job_id: str | None = None,
     proposal_store: CurationProposalStore | None = None,
+    vector_store: VectorStore,
+    config: JobctlConfig | None = None,
 ) -> dict[str, int]:
     """Persist safe reconciled facts and create review proposals for updates."""
     summary = {"added": 0, "duplicates": 0, "updates_proposed": 0, "skipped": 0}
@@ -204,7 +216,15 @@ def persist_reconciled_resume_facts(
             _publish_progress(bus, job_id, index, total, fact.entity_name + " (needs review)")
             continue
 
-        node_id, created = _persist_single_fact(conn, fact, llm_client, source_ref, item.confidence)
+        node_id, created = _persist_single_fact(
+            conn,
+            fact,
+            llm_client,
+            source_ref,
+            item.confidence,
+            vector_store=vector_store,
+            config=config,
+        )
         if store is not None and job_id is not None:
             store.mark_item_done(job_id, external_id=external_id, node_id=node_id)
         if created:
@@ -224,12 +244,20 @@ def ingest_resume_enriched(
     job_id: str | None = None,
     proposal_store: CurationProposalStore | None = None,
     question_store: RefinementQuestionStore | None = None,
+    vector_store: VectorStore,
+    config: JobctlConfig | None = None,
 ) -> dict[str, object]:
     """Read, extract, reconcile, persist, and plan refinement for a resume."""
     text = read_resume(resume_path)
     profile = extract_facts_from_resume(text, llm_client)
     source_ref = str(resume_path)
-    reconciliation = reconcile_resume_facts(conn, profile.facts, llm_client, source_ref)
+    reconciliation = reconcile_resume_facts(
+        conn,
+        profile.facts,
+        llm_client,
+        source_ref,
+        vector_store=vector_store,
+    )
     persistence = persist_reconciled_resume_facts(
         conn,
         reconciliation,
@@ -239,8 +267,16 @@ def ingest_resume_enriched(
         store=store,
         job_id=job_id,
         proposal_store=proposal_store,
+        vector_store=vector_store,
+        config=config,
     )
-    promoted_skills = promote_resume_skill_nodes(conn, llm_client, source_ref)
+    promoted_skills = promote_resume_skill_nodes(
+        conn,
+        llm_client,
+        source_ref,
+        vector_store=vector_store,
+        config=config,
+    )
     normalized_edges = normalize_resume_edges(conn)
     inferred_edges = infer_resume_edges(conn)
     question_store = question_store or RefinementQuestionStore(conn)
@@ -269,6 +305,9 @@ def _persist_single_fact(
     llm_client,
     source_ref: str,
     confidence: float,
+    *,
+    vector_store: VectorStore,
+    config: JobctlConfig | None,
 ) -> tuple[str, bool]:
     entity_type = fact.entity_type.lower()
     existing = [
@@ -289,10 +328,16 @@ def _persist_single_fact(
             fact.text_representation,
         )
         created = True
-        _embed_node_best_effort(conn, node_id, llm_client)
+        _index_node_best_effort(conn, vector_store, node_id, llm_client, config=config)
     add_node_source(conn, node_id, "resume", source_ref, confidence, fact.text_representation)
 
-    related_node_id = _resolve_related_node(conn, fact, llm_client)
+    related_node_id = _resolve_related_node(
+        conn,
+        fact,
+        llm_client,
+        vector_store=vector_store,
+        config=config,
+    )
     if related_node_id is not None and fact.relation:
         relation = normalize_resume_relation(fact.relation, entity_type)
         source_id, target_id = _edge_direction(
@@ -438,6 +483,9 @@ def promote_resume_skill_nodes(
     conn: sqlite3.Connection,
     llm_client,
     source_ref: str,
+    *,
+    vector_store: VectorStore,
+    config: JobctlConfig | None = None,
 ) -> dict[str, int]:
     """Promote nested resume technology properties into first-class skills."""
     nodes = search_nodes(conn)
@@ -463,7 +511,7 @@ def promote_resume_skill_nodes(
                     {"source_context": f"Promoted from {node['type']}:{node['name']}"},
                     skill_name,
                 )
-                _embed_node_best_effort(conn, skill_id, llm_client)
+                _index_node_best_effort(conn, vector_store, skill_id, llm_client, config=config)
                 add_node_source(
                     conn,
                     skill_id,
@@ -650,17 +698,20 @@ def _create_update_proposal(
     )
 
 
-def _embed_node_best_effort(
+def _index_node_best_effort(
     conn: sqlite3.Connection,
+    vector_store: VectorStore,
     node_id: str,
     llm_client,
+    *,
+    config: JobctlConfig | None = None,
 ) -> None:
     if llm_client is None or not hasattr(llm_client, "get_embedding"):
         return
     try:
-        embed_node(conn, node_id, llm_client)
+        index_node(conn, vector_store, node_id, llm_client, config=config)
     except Exception as exc:  # noqa: BLE001 - embeddings should not block graph writes
-        logger.warning("Skipping embedding for node %s: %s", node_id, exc)
+        logger.warning("Skipping vector index for node %s: %s", node_id, exc)
 
 
 def _publish_progress(
@@ -739,7 +790,14 @@ def _edit_fact(fact: ExtractedFact) -> ExtractedFact | None:
         temp_path.unlink(missing_ok=True)
 
 
-def _resolve_related_node(conn: sqlite3.Connection, fact: ExtractedFact, llm_client) -> str | None:
+def _resolve_related_node(
+    conn: sqlite3.Connection,
+    fact: ExtractedFact,
+    llm_client,
+    *,
+    vector_store: VectorStore,
+    config: JobctlConfig | None = None,
+) -> str | None:
     if not fact.related_to:
         return None
 
@@ -749,7 +807,7 @@ def _resolve_related_node(conn: sqlite3.Connection, fact: ExtractedFact, llm_cli
         return exact_matches[0]["id"]
 
     related_node_id = add_node(conn, "unknown", fact.related_to, {}, fact.related_to)
-    _embed_node_best_effort(conn, related_node_id, llm_client)
+    _index_node_best_effort(conn, vector_store, related_node_id, llm_client, config=config)
     return related_node_id
 
 

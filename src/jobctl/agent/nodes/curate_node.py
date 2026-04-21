@@ -12,6 +12,8 @@ from jobctl.curation.duplicates import find_duplicate_candidates
 from jobctl.curation.proposals import CurationProposalStore
 from jobctl.curation.rephrase import propose_rephrase
 from jobctl.llm.base import LLMProvider, Message
+from jobctl.llm.adapter import as_embedding_client
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -106,13 +108,18 @@ def curate_node(
     conn: sqlite3.Connection,
     proposal_store: CurationProposalStore,
     bus: AsyncEventBus,
+    vector_store: VectorStore,
 ) -> AgentState:
     """Generate curation proposals and publish a summary to ``bus``."""
 
     counts = {"merge": 0, "rephrase": 0, "connect": 0, "prune": 0, "orphans": 0}
 
     try:
-        for candidate in find_duplicate_candidates(conn):
+        for candidate in find_duplicate_candidates(
+            conn,
+            vector_store,
+            as_embedding_client(provider),
+        ):
             proposal_store.create_proposal(
                 "merge",
                 {

@@ -13,6 +13,8 @@ from textual.widgets import Button, Collapsible, Label, Static
 from jobctl.core.jobs.runner import BackgroundJobRunner
 from jobctl.curation.apply import apply_proposal
 from jobctl.curation.proposals import CurationProposalStore, Proposal
+from jobctl.llm.base import LLMProvider
+from jobctl.rag.store import VectorStore
 from jobctl.tui.widgets.proposal_card import CurationProposalCard
 
 
@@ -55,12 +57,16 @@ class CurateView(Vertical):
         conn: sqlite3.Connection,
         runner: BackgroundJobRunner,
         *,
+        vector_store: VectorStore,
+        provider: LLMProvider | None = None,
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
         self.conn = conn
         self.runner = runner
         self.store = CurationProposalStore(conn)
+        self.vector_store = vector_store
+        self.provider = provider
         self._focused_group: str | None = None
 
     def compose(self) -> ComposeResult:
@@ -127,7 +133,13 @@ class CurateView(Vertical):
             self.query_one("#status", Label).update("Proposal not found")
             return
         try:
-            apply_proposal(self.conn, proposal.kind, proposal.payload)
+            apply_proposal(
+                self.conn,
+                proposal.kind,
+                proposal.payload,
+                self.vector_store,
+                llm_client=self.provider,
+            )
         except Exception as exc:  # noqa: BLE001
             self.query_one("#status", Label).update(f"Accept failed: {exc}")
             return
