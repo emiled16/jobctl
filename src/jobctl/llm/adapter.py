@@ -1,4 +1,4 @@
-"""Adapters bridging LLMProvider to legacy client interfaces."""
+"""Adapters bridging LLMProvider to embedding-client interfaces."""
 
 from __future__ import annotations
 
@@ -6,11 +6,10 @@ from jobctl.llm.base import LLMProvider
 
 
 class EmbeddingAdapter:
-    """Adapt an :class:`LLMProvider` to the legacy ``EmbeddingClient`` interface.
+    """Adapt an :class:`LLMProvider` to the RAG indexing embedding interface.
 
-    The ``jobctl.db.vectors`` helpers expect ``get_embedding`` and
-    ``get_embeddings_batch`` methods. This adapter forwards both to
-    ``LLMProvider.embed``.
+    RAG indexing expects ``get_embedding`` and ``get_embeddings_batch``
+    methods. This adapter forwards both to ``LLMProvider.embed``.
     """
 
     def __init__(self, provider: LLMProvider) -> None:

@@ -20,10 +20,10 @@ def conn(tmp_path) -> sqlite3.Connection:
         connection.close()
 
 
-def test_rephrase_updates_node_text(conn: sqlite3.Connection) -> None:
+def test_rephrase_updates_node_text(conn: sqlite3.Connection, fake_vector_store) -> None:
     node_id = add_node(conn, "skill", "Python", {}, "Old text")
 
-    apply_rephrase(conn, {"node_id": node_id, "proposed_text": "New text"})
+    apply_rephrase(conn, {"node_id": node_id, "proposed_text": "New text"}, fake_vector_store)
 
     assert get_node(conn, node_id)["text_representation"] == "New text"
 
@@ -38,16 +38,19 @@ def test_connect_creates_edge_once(conn: sqlite3.Connection) -> None:
     assert len(get_edges_from(conn, source)) == 1
 
 
-def test_prune_deletes_node(conn: sqlite3.Connection) -> None:
+def test_prune_deletes_node(conn: sqlite3.Connection, fake_vector_store) -> None:
     node_id = add_node(conn, "skill", "Unused", {}, "Unused")
 
-    apply_prune(conn, {"node_id": node_id})
+    apply_prune(conn, {"node_id": node_id}, fake_vector_store)
 
     with pytest.raises(KeyError):
         get_node(conn, node_id)
 
 
-def test_merge_preserves_relationships_and_sources(conn: sqlite3.Connection) -> None:
+def test_merge_preserves_relationships_and_sources(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     keep = add_node(conn, "skill", "Python", {}, "Python")
     drop = add_node(conn, "skill", "Py", {}, "Py")
     neighbor = add_node(conn, "role", "Engineer", {}, "Engineer")
@@ -70,6 +73,7 @@ def test_merge_preserves_relationships_and_sources(conn: sqlite3.Connection) -> 
             "merged_name": "Python",
             "merged_text": "Python programming",
         },
+        fake_vector_store,
     )
 
     assert get_node(conn, keep)["text_representation"] == "Python programming"

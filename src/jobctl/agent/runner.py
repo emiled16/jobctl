@@ -19,6 +19,7 @@ from jobctl.agent.state import (
 )
 from jobctl.core.events import AgentDoneEvent, AsyncEventBus
 from jobctl.llm.base import LLMProvider, Message
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class LangGraphRunner:
         runner: Any | None = None,
         config: Any | None = None,
         db_path: Path | None = None,
+        vector_store: VectorStore | None = None,
     ) -> None:
         self.provider = provider
         self.conn = conn
@@ -46,6 +48,7 @@ class LangGraphRunner:
         self.runner = runner
         self.config = config
         self.db_path = db_path
+        self.vector_store = vector_store
         self._compiled: Any | None = None
 
     def _ensure_graph(self) -> Any:
@@ -60,6 +63,7 @@ class LangGraphRunner:
                 runner=self.runner,
                 config=self.config,
                 db_path=self.db_path,
+                vector_store=self.vector_store,
             )
         return self._compiled
 

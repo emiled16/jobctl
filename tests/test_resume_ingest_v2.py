@@ -67,20 +67,40 @@ def fact(
     )
 
 
-def test_candidate_matching_and_fast_path_duplicate(conn: sqlite3.Connection) -> None:
+def test_candidate_matching_and_fast_path_duplicate(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     add_node(conn, "skill", "Python", {}, "Python skill")
 
     resume_fact = fact()
-    candidates = find_candidate_nodes_for_fact(conn, resume_fact, FakeLLMClient())
-    result = reconcile_resume_facts(conn, [resume_fact], FakeLLMClient(), "resume.md")
+    candidates = find_candidate_nodes_for_fact(
+        conn,
+        resume_fact,
+        FakeLLMClient(),
+        vector_store=fake_vector_store,
+    )
+    result = reconcile_resume_facts(
+        conn,
+        [resume_fact],
+        FakeLLMClient(),
+        "resume.md",
+        vector_store=fake_vector_store,
+    )
 
     assert candidates[0].name == "Python"
     assert result.facts[0].classification == "duplicate"
     assert result.summary_counts["duplicate"] == 1
 
 
-def test_no_candidate_fast_path_new(conn: sqlite3.Connection) -> None:
-    result = reconcile_resume_facts(conn, [fact(entity_name="Go", text="Go skill")], None, "r.md")
+def test_no_candidate_fast_path_new(conn: sqlite3.Connection, fake_vector_store) -> None:
+    result = reconcile_resume_facts(
+        conn,
+        [fact(entity_name="Go", text="Go skill")],
+        None,
+        "r.md",
+        vector_store=fake_vector_store,
+    )
 
     assert result.facts[0].classification == "new"
     assert result.summary_counts["new"] == 1
@@ -88,6 +108,7 @@ def test_no_candidate_fast_path_new(conn: sqlite3.Connection) -> None:
 
 def test_persist_reconciled_facts_skips_duplicates_and_adds_new_once(
     conn: sqlite3.Connection,
+    fake_vector_store,
 ) -> None:
     role_id = add_node(conn, "role", "Staff Engineer", {}, "Staff Engineer role")
     duplicate = FactReconciliation(
@@ -111,9 +132,19 @@ def test_persist_reconciled_facts_skips_duplicates_and_adds_new_once(
         ],
     )
 
-    summary = persist_reconciled_resume_facts(conn, reconciliation, FakeLLMClient(), "resume.md")
+    summary = persist_reconciled_resume_facts(
+        conn,
+        reconciliation,
+        FakeLLMClient(),
+        "resume.md",
+        vector_store=fake_vector_store,
+    )
     summary_again = persist_reconciled_resume_facts(
-        conn, reconciliation, FakeLLMClient(), "resume.md"
+        conn,
+        reconciliation,
+        FakeLLMClient(),
+        "resume.md",
+        vector_store=fake_vector_store,
     )
 
     assert summary["duplicates"] == 1
@@ -125,6 +156,7 @@ def test_persist_reconciled_facts_skips_duplicates_and_adds_new_once(
 
 def test_persist_reconciled_facts_does_not_fail_when_embedding_fails(
     conn: sqlite3.Connection,
+    fake_vector_store,
 ) -> None:
     reconciliation = ResumeReconciliationResult(
         source_ref="resume.md",
@@ -138,14 +170,21 @@ def test_persist_reconciled_facts_does_not_fail_when_embedding_fails(
     )
 
     summary = persist_reconciled_resume_facts(
-        conn, reconciliation, FailingEmbeddingClient(), "resume.md"
+        conn,
+        reconciliation,
+        FailingEmbeddingClient(),
+        "resume.md",
+        vector_store=fake_vector_store,
     )
 
     assert summary["added"] == 1
     assert len(get_nodes_by_type(conn, "skill")) == 1
 
 
-def test_update_classification_creates_update_fact_proposal(conn: sqlite3.Connection) -> None:
+def test_update_classification_creates_update_fact_proposal(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     node_id = add_node(conn, "achievement", "Reduced latency", {}, "Reduced latency")
     store = CurationProposalStore(conn)
     reconciliation = ResumeReconciliationResult(
@@ -167,7 +206,12 @@ def test_update_classification_creates_update_fact_proposal(conn: sqlite3.Connec
     )
 
     persist_reconciled_resume_facts(
-        conn, reconciliation, FakeLLMClient(), "resume.md", proposal_store=store
+        conn,
+        reconciliation,
+        FakeLLMClient(),
+        "resume.md",
+        proposal_store=store,
+        vector_store=fake_vector_store,
     )
     proposals = store.list_pending("update_fact")
 
@@ -175,7 +219,10 @@ def test_update_classification_creates_update_fact_proposal(conn: sqlite3.Connec
     assert proposals[0].payload["node_id"] == node_id
 
 
-def test_apply_update_fact_merges_properties_and_source(conn: sqlite3.Connection) -> None:
+def test_apply_update_fact_merges_properties_and_source(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     node_id = add_node(conn, "achievement", "Latency", {"stack": ["api"]}, "Latency work")
 
     apply_proposal(
@@ -187,6 +234,7 @@ def test_apply_update_fact_merges_properties_and_source(conn: sqlite3.Connection
             "proposed_properties": {"metrics": ["40%"], "stack": ["api", "cache"]},
             "source_ref": "resume.md",
         },
+        fake_vector_store,
     )
 
     node = get_node(conn, node_id)
@@ -278,6 +326,7 @@ def test_infer_resume_edges_links_relationless_resume_nodes(conn: sqlite3.Connec
 
 def test_promote_resume_skill_nodes_creates_skills_from_nested_properties(
     conn: sqlite3.Connection,
+    fake_vector_store,
 ) -> None:
     project_id = add_node(
         conn,
@@ -292,7 +341,12 @@ def test_promote_resume_skill_nodes_creates_skills_from_nested_properties(
     )
     add_node(conn, "skill", "GCP", {}, "GCP")
 
-    summary = promote_resume_skill_nodes(conn, FakeLLMClient(), "resume.md")
+    summary = promote_resume_skill_nodes(
+        conn,
+        FakeLLMClient(),
+        "resume.md",
+        vector_store=fake_vector_store,
+    )
 
     skills = {node["name"] for node in get_nodes_by_type(conn, "skill")}
     assert summary == {"skills_created": 4, "skill_edges_added": 5}
@@ -302,7 +356,10 @@ def test_promote_resume_skill_nodes_creates_skills_from_nested_properties(
     assert {edge["target"]["name"] for edge in edges} == skills
 
 
-def test_promote_resume_skill_nodes_is_idempotent(conn: sqlite3.Connection) -> None:
+def test_promote_resume_skill_nodes_is_idempotent(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     add_node(
         conn,
         "achievement",
@@ -311,8 +368,18 @@ def test_promote_resume_skill_nodes_is_idempotent(conn: sqlite3.Connection) -> N
         "Built distributed PySpark pipelines",
     )
 
-    first = promote_resume_skill_nodes(conn, FakeLLMClient(), "resume.md")
-    second = promote_resume_skill_nodes(conn, FakeLLMClient(), "resume.md")
+    first = promote_resume_skill_nodes(
+        conn,
+        FakeLLMClient(),
+        "resume.md",
+        vector_store=fake_vector_store,
+    )
+    second = promote_resume_skill_nodes(
+        conn,
+        FakeLLMClient(),
+        "resume.md",
+        vector_store=fake_vector_store,
+    )
 
     assert first == {"skills_created": 1, "skill_edges_added": 1}
     assert second == {"skills_created": 0, "skill_edges_added": 0}

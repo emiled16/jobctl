@@ -9,6 +9,9 @@ Migration = tuple[str, Callable[[sqlite3.Connection], None]]
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
+    use_memory = str(db_path) == ":memory:"
+    if not use_memory:
+        _run_file_migrations(db_path)
     if str(db_path) != ":memory:":
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -18,11 +21,39 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
-    _run_migrations(conn)
-    from jobctl.db.vectors import init_vec
-
-    init_vec(conn)
+    if use_memory or _needs_legacy_migrations(conn):
+        _run_migrations(conn)
     return conn
+
+
+def _run_file_migrations(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists() and db_path.stat().st_size > 0:
+        with sqlite3.connect(str(db_path)) as conn:
+            names = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_schema WHERE type IN ('table', 'view')"
+                ).fetchall()
+            }
+        if names and "alembic_version" not in names:
+            return
+
+    from alembic import command
+    from alembic.config import Config
+
+    repo_root = Path(__file__).resolve().parents[3]
+    alembic_cfg = Config(str(repo_root / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(repo_root / "alembic"))
+    alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    command.upgrade(alembic_cfg, "head")
+
+
+def _needs_legacy_migrations(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'alembic_version'"
+    ).fetchone()
+    return row is None
 
 
 def _run_migrations(conn: sqlite3.Connection) -> None:

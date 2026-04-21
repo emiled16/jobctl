@@ -42,6 +42,13 @@ def print_config(config: JobctlConfig) -> None:
         "llm.openai.api_key_env": config.llm.openai.api_key_env,
         "llm.ollama.host": config.llm.ollama.host,
         "llm.ollama.embedding_model": config.llm.ollama.embedding_model,
+        "vector_store.provider": config.vector_store.provider,
+        "vector_store.mode": config.vector_store.mode,
+        "vector_store.path": config.vector_store.path,
+        "vector_store.url": config.vector_store.url,
+        "vector_store.api_key_env": config.vector_store.api_key_env,
+        "vector_store.collection": config.vector_store.collection,
+        "vector_store.distance": config.vector_store.distance,
         "default_template": config.default_template,
     }
 
@@ -81,22 +88,28 @@ def run_tui(start_screen: str = "chat", initial_message: str | None = None) -> N
         config = load_config(project_root)
         from jobctl.db.connection import get_connection
         from jobctl.llm.registry import get_provider
+        from jobctl.app.rag import qdrant_health_message
+        from jobctl.rag.factory import create_vector_store
         from jobctl.tui.app import JobctlApp
 
         provider = get_provider(config, cwd=project_root)
+        vector_store = create_vector_store(config, project_root)
         db_path = project_root / CONFIG_DIR_NAME / "jobctl.db"
         conn = get_connection(db_path)
         try:
+            health_message = qdrant_health_message(project_root, conn, vector_store)
             JobctlApp(
                 conn=conn,
                 project_root=project_root,
                 config=config,
                 provider=provider,
+                vector_store=vector_store,
                 db_path=db_path,
                 start_screen=start_screen,
-                initial_message=initial_message,
+                initial_message=initial_message or health_message,
             ).run()
         finally:
+            vector_store.close()
             conn.close()
     except ConfigError as exc:
         raise command_error(str(exc)) from exc

@@ -19,41 +19,52 @@ from jobctl.db.graph import (
     search_nodes,
     update_node,
 )
-from jobctl.db.vectors import embed_node
+from jobctl.config import JobctlConfig
 from jobctl.llm.schemas import ExtractedFact
+from jobctl.rag.indexing import delete_node_document, index_node
+from jobctl.rag.store import VectorStore
 
 
 def apply_proposal(
     conn: sqlite3.Connection,
     kind: str,
     payload: dict[str, Any],
+    vector_store: VectorStore,
     llm_client: Any | None = None,
+    config: JobctlConfig | None = None,
 ) -> None:
     if kind == "merge":
-        apply_merge(conn, payload)
+        apply_merge(conn, payload, vector_store, llm_client, config=config)
         return
     if kind == "rephrase":
-        apply_rephrase(conn, payload)
+        apply_rephrase(conn, payload, vector_store, llm_client, config=config)
         return
     if kind == "connect":
         apply_connect(conn, payload)
         return
     if kind == "prune":
-        apply_prune(conn, payload)
+        apply_prune(conn, payload, vector_store)
         return
     if kind == "add_fact":
-        apply_add_fact(conn, payload, llm_client)
+        apply_add_fact(conn, payload, vector_store, llm_client, config=config)
         return
     if kind == "update_fact":
-        apply_update_fact(conn, payload, llm_client)
+        apply_update_fact(conn, payload, vector_store, llm_client, config=config)
         return
     if kind == "refine_experience":
-        apply_refine_experience(conn, payload, llm_client)
+        apply_refine_experience(conn, payload, vector_store, llm_client, config=config)
         return
     raise ValueError(f"Unsupported proposal kind: {kind}")
 
 
-def apply_merge(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
+def apply_merge(
+    conn: sqlite3.Connection,
+    payload: dict[str, Any],
+    vector_store: VectorStore,
+    llm_client: Any | None = None,
+    *,
+    config: JobctlConfig | None = None,
+) -> None:
     keep_id = str(payload.get("node_a_id") or payload.get("keep_node_id") or "")
     drop_id = str(payload.get("node_b_id") or payload.get("drop_node_id") or "")
     if not keep_id or not drop_id:
@@ -81,14 +92,24 @@ def apply_merge(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
     conn.execute("UPDATE node_sources SET node_id = ? WHERE node_id = ?", (keep_id, drop_id))
     delete_node(conn, drop_id)
     update_node(conn, keep_id, type=keep["type"])
+    delete_node_document(vector_store, drop_id)
+    _index_node_if_possible(conn, vector_store, keep_id, llm_client, config=config)
 
 
-def apply_rephrase(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
+def apply_rephrase(
+    conn: sqlite3.Connection,
+    payload: dict[str, Any],
+    vector_store: VectorStore,
+    llm_client: Any | None = None,
+    *,
+    config: JobctlConfig | None = None,
+) -> None:
     node_id = str(payload.get("node_id") or "")
     proposed = payload.get("proposed_text")
     if not node_id or not proposed:
         raise ValueError("rephrase proposal requires node_id and proposed_text")
     update_node(conn, node_id, text_representation=str(proposed))
+    _index_node_if_possible(conn, vector_store, node_id, llm_client, config=config)
 
 
 def apply_connect(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
@@ -103,17 +124,25 @@ def apply_connect(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
         add_edge(conn, source_id, target_id, relation, {})
 
 
-def apply_prune(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
+def apply_prune(
+    conn: sqlite3.Connection,
+    payload: dict[str, Any],
+    vector_store: VectorStore,
+) -> None:
     node_id = str(payload.get("node_id") or "")
     if not node_id:
         raise ValueError("prune proposal requires node_id")
     delete_node(conn, node_id)
+    delete_node_document(vector_store, node_id)
 
 
 def apply_add_fact(
     conn: sqlite3.Connection,
     payload: dict[str, Any],
+    vector_store: VectorStore,
     llm_client: Any | None = None,
+    *,
+    config: JobctlConfig | None = None,
 ) -> None:
     fact = ExtractedFact.model_validate(payload.get("fact") or payload)
     source_ref = str(payload.get("source_ref") or "")
@@ -124,8 +153,7 @@ def apply_add_fact(
         fact.properties,
         fact.text_representation,
     )
-    if llm_client is not None and hasattr(llm_client, "get_embedding"):
-        embed_node(conn, node_id, llm_client)
+    _index_node_if_possible(conn, vector_store, node_id, llm_client, config=config)
     add_node_source(
         conn,
         node_id,
@@ -134,7 +162,7 @@ def apply_add_fact(
         float(payload.get("confidence") or 1.0),
         fact.text_representation,
     )
-    related_id = _resolve_related_node(conn, fact, llm_client)
+    related_id = _resolve_related_node(conn, fact, vector_store, llm_client, config=config)
     if related_id is not None and fact.relation:
         add_edge_if_missing(conn, node_id, related_id, fact.relation, {})
 
@@ -142,7 +170,10 @@ def apply_add_fact(
 def apply_update_fact(
     conn: sqlite3.Connection,
     payload: dict[str, Any],
+    vector_store: VectorStore,
     llm_client: Any | None = None,
+    *,
+    config: JobctlConfig | None = None,
 ) -> None:
     node_id = str(payload.get("node_id") or "")
     if not node_id:
@@ -171,14 +202,16 @@ def apply_update_fact(
         float(payload.get("confidence") or 1.0),
         str(proposed_text or ""),
     )
-    if llm_client is not None and hasattr(llm_client, "get_embedding"):
-        embed_node(conn, node_id, llm_client)
+    _index_node_if_possible(conn, vector_store, node_id, llm_client, config=config)
 
 
 def apply_refine_experience(
     conn: sqlite3.Connection,
     payload: dict[str, Any],
+    vector_store: VectorStore,
     llm_client: Any | None = None,
+    *,
+    config: JobctlConfig | None = None,
 ) -> None:
     target_node_id = payload.get("target_node_id")
     node_updates = payload.get("node_updates") or {}
@@ -193,14 +226,19 @@ def apply_refine_experience(
                 "source_ref": payload.get("source_ref"),
                 "confidence": 1.0,
             },
+            vector_store,
             llm_client,
+            config=config,
         )
 
 
 def _resolve_related_node(
     conn: sqlite3.Connection,
     fact: ExtractedFact,
+    vector_store: VectorStore,
     llm_client: Any | None,
+    *,
+    config: JobctlConfig | None = None,
 ) -> str | None:
     if not fact.related_to:
         return None
@@ -209,9 +247,21 @@ def _resolve_related_node(
     if exact:
         return exact[0]["id"]
     node_id = add_node(conn, "unknown", fact.related_to, {}, fact.related_to)
-    if llm_client is not None and hasattr(llm_client, "get_embedding"):
-        embed_node(conn, node_id, llm_client)
+    _index_node_if_possible(conn, vector_store, node_id, llm_client, config=config)
     return node_id
+
+
+def _index_node_if_possible(
+    conn: sqlite3.Connection,
+    vector_store: VectorStore,
+    node_id: str,
+    llm_client: Any | None,
+    *,
+    config: JobctlConfig | None = None,
+) -> None:
+    if llm_client is None or not hasattr(llm_client, "get_embedding"):
+        return
+    index_node(conn, vector_store, node_id, llm_client, config=config)
 
 
 def _append_once(existing: str, addition: str) -> str:

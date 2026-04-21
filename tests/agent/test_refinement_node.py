@@ -31,7 +31,7 @@ def _question(source_ref: str, target_node_id: str) -> RefinementQuestion:
     )
 
 
-def test_refinement_answer_shows_diff_before_applying(tmp_path: Path) -> None:
+def test_refinement_answer_shows_diff_before_applying(tmp_path: Path, fake_vector_store) -> None:
     conn = get_connection(tmp_path / ".jobctl.db")
     node_id = add_node(conn, "achievement", "Latency", {}, "Improved latency")
     store = RefinementQuestionStore(conn)
@@ -43,6 +43,7 @@ def test_refinement_answer_shows_diff_before_applying(tmp_path: Path) -> None:
         state,
         provider=FakeLLMProvider(chat_reply="not json", embedding_dimensions=1536),
         conn=conn,
+        vector_store=fake_vector_store,
         bus=AsyncEventBus(),
     )
 
@@ -56,7 +57,7 @@ def test_refinement_answer_shows_diff_before_applying(tmp_path: Path) -> None:
     conn.close()
 
 
-def test_refinement_accept_applies_reviewed_diff(tmp_path: Path) -> None:
+def test_refinement_accept_applies_reviewed_diff(tmp_path: Path, fake_vector_store) -> None:
     conn = get_connection(tmp_path / ".jobctl.db")
     node_id = add_node(conn, "achievement", "Latency", {}, "Improved latency")
     store = RefinementQuestionStore(conn)
@@ -65,12 +66,24 @@ def test_refinement_accept_applies_reviewed_diff(tmp_path: Path) -> None:
     state["messages"] = [{"role": "user", "content": "Reduced p95 latency by 40%"}]
     provider = FakeLLMProvider(chat_reply="not json", embedding_dimensions=1536)
 
-    review_state = refinement_node(state, provider=provider, conn=conn, bus=AsyncEventBus())
+    review_state = refinement_node(
+        state,
+        provider=provider,
+        conn=conn,
+        vector_store=fake_vector_store,
+        bus=AsyncEventBus(),
+    )
     review_state["messages"] = [
         *list(review_state.get("messages") or []),
         {"role": "user", "content": "accept"},
     ]
-    result = refinement_node(review_state, provider=provider, conn=conn, bus=AsyncEventBus())
+    result = refinement_node(
+        review_state,
+        provider=provider,
+        conn=conn,
+        vector_store=fake_vector_store,
+        bus=AsyncEventBus(),
+    )
 
     node = get_node(conn, node_id)
     assert node["properties"]["confirmed_impact"] == "Reduced p95 latency by 40%"
@@ -83,7 +96,7 @@ def test_refinement_accept_applies_reviewed_diff(tmp_path: Path) -> None:
     conn.close()
 
 
-def test_refinement_reject_discards_reviewed_diff(tmp_path: Path) -> None:
+def test_refinement_reject_discards_reviewed_diff(tmp_path: Path, fake_vector_store) -> None:
     conn = get_connection(tmp_path / ".jobctl.db")
     node_id = add_node(conn, "achievement", "Latency", {}, "Improved latency")
     store = RefinementQuestionStore(conn)
@@ -92,12 +105,24 @@ def test_refinement_reject_discards_reviewed_diff(tmp_path: Path) -> None:
     state["messages"] = [{"role": "user", "content": "Reduced p95 latency by 40%"}]
     provider = FakeLLMProvider(chat_reply="not json", embedding_dimensions=1536)
 
-    review_state = refinement_node(state, provider=provider, conn=conn, bus=AsyncEventBus())
+    review_state = refinement_node(
+        state,
+        provider=provider,
+        conn=conn,
+        vector_store=fake_vector_store,
+        bus=AsyncEventBus(),
+    )
     review_state["messages"] = [
         *list(review_state.get("messages") or []),
         {"role": "user", "content": "reject"},
     ]
-    result = refinement_node(review_state, provider=provider, conn=conn, bus=AsyncEventBus())
+    result = refinement_node(
+        review_state,
+        provider=provider,
+        conn=conn,
+        vector_store=fake_vector_store,
+        bus=AsyncEventBus(),
+    )
 
     node = get_node(conn, node_id)
     assert node["properties"] == {}

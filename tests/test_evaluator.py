@@ -5,10 +5,9 @@ import pytest
 
 from jobctl.db.connection import get_connection
 from jobctl.db.graph import add_edge, add_node
-from jobctl.db.vectors import EMBEDDING_DIMENSIONS
-from jobctl.jobs import evaluator
 from jobctl.jobs.evaluator import display_evaluation, evaluate_fit, retrieve_relevant_experience
 from jobctl.llm.schemas import ExtractedJD, FitEvaluation
+from jobctl.rag.store import EMBEDDING_DIMENSIONS, VectorHit
 
 
 class FakeLLMClient:
@@ -43,21 +42,20 @@ def conn() -> sqlite3.Connection:
 
 def test_retrieve_relevant_experience_merges_matching_subgraphs(
     conn: sqlite3.Connection,
-    monkeypatch: pytest.MonkeyPatch,
+    fake_vector_store,
 ) -> None:
     role_id = add_node(conn, "role", "Senior Engineer", {}, "Built Python platforms")
     skill_id = add_node(conn, "skill", "Python", {}, "Python engineering")
     add_node(conn, "skill", "Design", {}, "Product design")
     add_edge(conn, role_id, skill_id, "used_skill", {})
-    monkeypatch.setattr(
-        evaluator,
-        "search_similar",
-        lambda _conn, _embedding, top_k: [(role_id, 0.0), (skill_id, 0.1)],
-    )
+    fake_vector_store.hits = [
+        VectorHit(id=f"node:{role_id}", score=1.0, node_id=role_id),
+        VectorHit(id=f"node:{skill_id}", score=0.9, node_id=skill_id),
+    ]
     jd = make_jd()
     llm_client = FakeLLMClient()
 
-    relevant_experience = retrieve_relevant_experience(conn, jd, llm_client)
+    relevant_experience = retrieve_relevant_experience(conn, jd, llm_client, fake_vector_store)
 
     assert llm_client.embedding_texts == ["Python\nBuild backend systems"]
     assert {node["id"] for node in relevant_experience["nodes"]} == {role_id, skill_id}

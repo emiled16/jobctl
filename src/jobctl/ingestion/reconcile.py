@@ -9,15 +9,16 @@ from difflib import SequenceMatcher
 from typing import Any
 
 from jobctl.db.graph import get_node, search_nodes
-from jobctl.db.vectors import search_similar
 from jobctl.ingestion.schemas import FactReconciliation, NodeMatch, ResumeReconciliationResult
 from jobctl.llm.schemas import ExtractedFact
+from jobctl.rag.store import VectorFilter, VectorStore
 
 
 def find_candidate_nodes_for_fact(
     conn: sqlite3.Connection,
     fact: ExtractedFact,
     llm_client: Any,
+    vector_store: VectorStore,
     limit: int = 5,
 ) -> list[NodeMatch]:
     """Return ranked deterministic candidates for a resume fact."""
@@ -46,18 +47,21 @@ def find_candidate_nodes_for_fact(
     if llm_client is not None and hasattr(llm_client, "get_embedding"):
         try:
             embedding = llm_client.get_embedding(_fact_text(fact))
-            for node_id, distance in search_similar(
-                conn, embedding, top_k=limit, type_filter=entity_type
-            ):
+            hits = vector_store.search(
+                embedding,
+                top_k=limit,
+                filters=VectorFilter(node_type=entity_type),
+            )
+            for hit in hits:
                 try:
-                    node = get_node(conn, node_id)
+                    node = get_node(conn, hit.node_id)
                 except KeyError:
                     continue
-                score = max(0.0, 1.0 - float(distance))
+                score = max(0.0, float(hit.score))
                 match = _match_from_node(node, fact)
                 match.score = max(match.score, score)
                 match.confidence = max(match.confidence, score)
-                match.signals.append(f"embedding:{distance:.3f}")
+                match.signals.append(f"qdrant:{hit.score:.3f}")
                 _merge_candidate(candidates, match)
         except Exception:
             pass
@@ -112,10 +116,17 @@ def reconcile_resume_facts(
     facts: list[ExtractedFact],
     llm_client: Any,
     source_ref: str,
+    *,
+    vector_store: VectorStore,
 ) -> ResumeReconciliationResult:
     reconciliations: list[FactReconciliation] = []
     for fact in facts:
-        candidates = find_candidate_nodes_for_fact(conn, fact, llm_client)
+        candidates = find_candidate_nodes_for_fact(
+            conn,
+            fact,
+            llm_client,
+            vector_store=vector_store,
+        )
         deterministic = _deterministic_classification(fact, candidates)
         if deterministic is None:
             deterministic = classify_fact_against_candidates(fact, candidates, llm_client)

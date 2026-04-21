@@ -15,6 +15,7 @@ from jobctl.core.events import (
     AsyncEventBus,
 )
 from jobctl.llm.base import LLMProvider, Message, ToolCall, ToolSpec
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ def _run_tool(
     tool_call: ToolCall,
     conn: sqlite3.Connection,
     provider: LLMProvider,
+    vector_store: VectorStore,
 ) -> dict[str, Any]:
     name = tool_call.get("name", "")
     args = tool_call.get("arguments") or {}
@@ -110,10 +112,19 @@ def _run_tool(
         except Exception as exc:  # noqa: BLE001
             logger.warning("vector_search embed failed: %s", exc)
             return {"error": str(exc), "results": []}
-        from jobctl.db.vectors import search_similar as _search_similar
-
-        hits = _search_similar(conn, embedding, top_k=top_k)
-        return {"results": [{"node_id": node_id, "score": score} for node_id, score in hits]}
+        hits = vector_store.search(embedding, top_k=top_k)
+        return {
+            "results": [
+                {
+                    "node_id": hit.node_id,
+                    "score": hit.score,
+                    "name": hit.name,
+                    "type": hit.node_type,
+                    "text": hit.text,
+                }
+                for hit in hits
+            ]
+        }
 
     return {"error": f"unknown tool: {name}"}
 
@@ -123,6 +134,7 @@ def graph_qa_node(
     *,
     provider: LLMProvider,
     conn: sqlite3.Connection,
+    vector_store: VectorStore,
     bus: AsyncEventBus,
 ) -> AgentState:
     """Answer questions using graph + vector search tools."""
@@ -138,7 +150,7 @@ def graph_qa_node(
                     args=dict(call.get("arguments") or {}),
                 )
             )
-            result = _run_tool(call, conn, provider)
+            result = _run_tool(call, conn, provider, vector_store)
             messages.append(
                 Message(
                     role="tool",

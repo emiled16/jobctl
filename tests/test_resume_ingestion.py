@@ -80,7 +80,10 @@ def test_extract_facts_from_resume_uses_structured_profile_schema() -> None:
     assert "Do not use legacy keys like type, name" in system_prompt
 
 
-def test_persist_facts_creates_nodes_edges_and_embeddings(conn: sqlite3.Connection) -> None:
+def test_persist_facts_creates_nodes_edges_and_embeddings(
+    conn: sqlite3.Connection,
+    fake_vector_store,
+) -> None:
     facts = [
         ExtractedFact(
             entity_type="Role",
@@ -117,7 +120,13 @@ def test_persist_facts_creates_nodes_edges_and_embeddings(conn: sqlite3.Connecti
     ]
     llm_client = FakeLLMClient()
 
-    persisted_count = persist_facts(conn, facts, llm_client, interactive=False)
+    persisted_count = persist_facts(
+        conn,
+        facts,
+        llm_client,
+        interactive=False,
+        vector_store=fake_vector_store,
+    )
 
     roles = get_nodes_by_type(conn, "role")
     role_edges = get_edges_from(conn, roles[0]["id"])

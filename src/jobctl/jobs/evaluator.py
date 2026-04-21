@@ -9,8 +9,8 @@ from rich.panel import Panel
 from rich.text import Text
 
 from jobctl.db.graph import Edge, Node, get_subgraph
-from jobctl.db.vectors import search_similar
 from jobctl.llm.schemas import ExtractedJD, FitEvaluation
+from jobctl.rag.store import VectorStore
 
 
 class FitEvaluationLLMClient(Protocol):
@@ -27,6 +27,7 @@ def retrieve_relevant_experience(
     conn: sqlite3.Connection,
     jd: ExtractedJD,
     llm_client: FitEvaluationLLMClient,
+    vector_store: VectorStore,
 ) -> dict[str, list[Node] | list[Edge]]:
     """Retrieve graph context most relevant to a job description."""
     query_text = "\n".join([*jd.requirements, *jd.responsibilities]).strip()
@@ -34,12 +35,12 @@ def retrieve_relevant_experience(
         query_text = jd.raw_text
 
     query_embedding = llm_client.get_embedding(query_text)
-    matches = search_similar(conn, query_embedding, top_k=20)
+    matches = vector_store.search(query_embedding, top_k=20)
 
     nodes: dict[str, Node] = {}
     edges: dict[str, Edge] = {}
-    for node_id, _distance in matches:
-        subgraph = get_subgraph(conn, node_id, depth=1)
+    for hit in matches:
+        subgraph = get_subgraph(conn, hit.node_id, depth=1)
         for node in subgraph["nodes"]:
             nodes[node["id"]] = node
         for edge in subgraph["edges"]:

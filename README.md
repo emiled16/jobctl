@@ -102,7 +102,17 @@ llm:
   ollama:
     host: http://localhost:11434
     embedding_model: nomic-embed-text
+vector_store:
+  provider: qdrant
+  mode: local
+  path: .jobctl/qdrant
+  collection: jobctl_nodes
+  distance: cosine
 ```
+
+For older projects, run `jobctl rag reindex` once to populate Qdrant from the
+existing SQLite graph. After verifying retrieval works, `jobctl rag
+cleanup-legacy-vectors --yes` removes old SQLite vector artifacts.
 
 ### OpenAI
 
@@ -127,7 +137,7 @@ jobctl config llm.ollama.host http://localhost:11434
 jobctl config llm.provider codex
 ```
 
-The embedding path still supports the local Transformers client (`sentence-transformers/all-MiniLM-L6-v2` by default) for provider-independent retrieval.
+The embedding path still supports the local Transformers client (`sentence-transformers/all-MiniLM-L6-v2` by default) for provider-independent retrieval. Vector data is stored in Qdrant local mode under `.jobctl/qdrant/`; SQLite remains the local relational store for app state, conversations, jobs, and tracker data.
 
 ## Resumable ingestion
 

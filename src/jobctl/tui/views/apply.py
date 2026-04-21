@@ -26,6 +26,7 @@ from textual.widgets import Button, Label, ProgressBar, Select, Static, TextArea
 
 from jobctl.core.events import ApplyProgressEvent, AsyncEventBus, JobLifecycleEvent
 from jobctl.llm.base import LLMProvider
+from jobctl.rag.store import VectorStore
 
 
 @dataclass
@@ -110,12 +111,14 @@ class ApplyView(Vertical):
         provider: LLMProvider,
         bus: AsyncEventBus,
         *,
+        vector_store: VectorStore,
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
         self.conn = conn
         self.provider = provider
         self.bus = bus
+        self.vector_store = vector_store
         self._applications: list[ApplicationRow] = []
         self.current_app_id: str | None = None
 

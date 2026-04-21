@@ -18,8 +18,10 @@ from jobctl.core.events import (
     IngestProgressEvent,
 )
 from jobctl.core.jobs.store import BackgroundJobStore
+from jobctl.config import JobctlConfig
 from jobctl.ingestion.resume import _EXTRACTED_PROFILE_SCHEMA_GUIDANCE, persist_facts
 from jobctl.llm.schemas import ExtractedProfile
+from jobctl.rag.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +157,8 @@ def ingest_github(
     store: BackgroundJobStore | None = None,
     job_id: str | None = None,
     preselected_repos: list[tuple[str, str]] | None = None,
+    vector_store: VectorStore,
+    config: JobctlConfig | None = None,
 ) -> int:
     """Ingest GitHub repositories, optionally with event-bus progress reporting.
 
@@ -211,6 +215,8 @@ def ingest_github(
                 profile.facts,
                 llm_client,
                 interactive=interactive and bus is None,
+                vector_store=vector_store,
+                config=config,
                 bus=bus,
                 store=store,
                 job_id=job_id,
