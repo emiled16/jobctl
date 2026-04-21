@@ -23,12 +23,106 @@ RESUME_SECTION_DEFAULTS = {
     "certifications": ("Certifications", 50),
     "projects": ("Projects", 60),
     "publications": ("Publications", 70),
+    "other": ("Other", 80),
 }
 
 TEMPLATE_DIRS = {
     "resume": "resume",
     "cover_letter": "cover-letters",
 }
+
+TEMPLATE_ALIASES = {
+    "standard": "modern-compact-resume.html",
+    "default": "modern-compact-resume.html",
+    "emile": "emile-resume.html",
+    "emile-compact": "modern-compact-resume.html",
+    "modern-compact": "modern-compact-resume.html",
+    "compact": "modern-compact-resume.html",
+    "modern": "modern-resume.html",
+}
+
+RESUME_FIT_PROFILES = [
+    {
+        "page_margin": "0.28in 0.32in 0.30in",
+        "body_font_size": "8.9pt",
+        "contact_font_size": "8.65pt",
+        "section_heading_font_size": "9.05pt",
+        "section_gap": "11px",
+        "heading_gap": "5px",
+        "entry_gap": "6px",
+        "line_item_font_size": "8.65pt",
+        "dense_font_size": "8.55pt",
+        "skills_row_gap": "3px",
+        "project_gap": "3px",
+    },
+    {
+        "page_margin": "0.25in 0.30in 0.27in",
+        "body_font_size": "8.8pt",
+        "contact_font_size": "8.6pt",
+        "section_heading_font_size": "9pt",
+        "section_gap": "9px",
+        "heading_gap": "4px",
+        "entry_gap": "5px",
+        "line_item_font_size": "8.55pt",
+        "dense_font_size": "8.45pt",
+        "skills_row_gap": "2px",
+        "project_gap": "2px",
+    },
+    {
+        "page_margin": "0.22in 0.28in 0.24in",
+        "body_font_size": "8.78pt",
+        "contact_font_size": "8.5pt",
+        "section_heading_font_size": "8.9pt",
+        "section_gap": "8.8px",
+        "heading_gap": "4px",
+        "entry_gap": "4.9px",
+        "line_item_font_size": "8.55pt",
+        "dense_font_size": "8.45pt",
+        "skills_row_gap": "2px",
+        "project_gap": "2px",
+    },
+    {
+        "page_margin": "0.22in 0.28in 0.24in",
+        "body_font_size": "8.65pt",
+        "contact_font_size": "8.5pt",
+        "section_heading_font_size": "8.9pt",
+        "section_gap": "7px",
+        "heading_gap": "4px",
+        "entry_gap": "4.5px",
+        "line_item_font_size": "8.45pt",
+        "dense_font_size": "8.4pt",
+        "skills_row_gap": "2px",
+        "project_gap": "2px",
+    },
+    {
+        "page_margin": "0.20in 0.26in 0.22in",
+        "body_font_size": "8.45pt",
+        "contact_font_size": "8.35pt",
+        "section_heading_font_size": "8.75pt",
+        "section_gap": "5px",
+        "heading_gap": "3px",
+        "entry_gap": "3px",
+        "line_item_font_size": "8.25pt",
+        "dense_font_size": "8.2pt",
+        "skills_row_gap": "1px",
+        "project_gap": "1px",
+    },
+    {
+        "page_margin": "0.18in 0.24in 0.20in",
+        "body_font_size": "8.25pt",
+        "contact_font_size": "8.15pt",
+        "section_heading_font_size": "8.55pt",
+        "section_gap": "4px",
+        "heading_gap": "2px",
+        "entry_gap": "2px",
+        "line_item_font_size": "8.05pt",
+        "dense_font_size": "8pt",
+        "skills_row_gap": "0",
+        "project_gap": "0",
+    },
+]
+
+DEFAULT_RESUME_FIT_PROFILE = RESUME_FIT_PROFILES[2]
 
 
 class MaterialValidationError(ValueError):
@@ -54,7 +148,7 @@ def render_pdf(
     yaml_path = yaml_path.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     loaded = load_material(yaml_path)
-    selected_template = template_name or infer_template_name(yaml_path, loaded)
+    selected_template = _normalize_template_name(template_name or infer_template_name(yaml_path, loaded))
     template = _load_template(yaml_path, selected_template)
     context = build_template_context(
         loaded,
@@ -62,8 +156,31 @@ def render_pdf(
         disable_sections=disable_sections,
         section_order=section_order,
     )
-    html = template.render(**context)
-    _html_class()(string=html, base_url=str(yaml_path.parent)).write_pdf(output_path)
+    html_class = _html_class()
+    if loaded.document_type == "resume" and selected_template == "modern-compact-resume.html":
+        best_html: str | None = None
+        best_page_count: int | None = None
+        for fit_profile in RESUME_FIT_PROFILES:
+            html = template.render(**{**context, "resume_fit": fit_profile})
+            page_count = _write_rendered_pdf(
+                html_class,
+                html,
+                yaml_path.parent,
+                output_path,
+                write=False,
+            )
+            if page_count is None:
+                _write_rendered_pdf(html_class, html, yaml_path.parent, output_path)
+                break
+            if best_page_count is None or page_count < best_page_count:
+                best_html = html
+                best_page_count = page_count
+        else:
+            if best_html is not None:
+                _write_rendered_pdf(html_class, best_html, yaml_path.parent, output_path)
+    else:
+        html = template.render(**{**context, "resume_fit": DEFAULT_RESUME_FIT_PROFILE})
+        _write_rendered_pdf(html_class, html, yaml_path.parent, output_path)
     return output_path
 
 
@@ -72,11 +189,11 @@ def infer_template_name(yaml_path: Path, loaded: LoadedMaterial | None = None) -
         return "cover-letter.html"
     if loaded and isinstance(loaded.model, ResumeYAML) and loaded.model.render:
         if loaded.model.render.template:
-            return loaded.model.render.template
+            return _normalize_template_name(loaded.model.render.template)
     name = yaml_path.name.lower()
     if "cover" in name:
         return "cover-letter.html"
-    return "emile-resume.html"
+    return "modern-compact-resume.html"
 
 
 def output_pdf_path(yaml_path: Path) -> Path:
@@ -307,6 +424,31 @@ def _matches_type(template_name: str, document_type: str) -> bool:
     if document_type == "cover_letter":
         return "cover" in normalized
     return "cover" not in normalized
+
+
+def _normalize_template_name(template_name: str) -> str:
+    return TEMPLATE_ALIASES.get(template_name, template_name)
+
+
+def _write_rendered_pdf(
+    html_class,
+    html: str,
+    base_url: Path,
+    output_path: Path,
+    *,
+    write: bool = True,
+) -> int | None:
+    html_document = html_class(string=html, base_url=str(base_url))
+    render = getattr(html_document, "render", None)
+    if render is None:
+        html_document.write_pdf(output_path)
+        return None
+
+    document = render()
+    page_count = len(getattr(document, "pages", ()))
+    if write:
+        document.write_pdf(output_path)
+    return page_count
 
 
 def _html_class():

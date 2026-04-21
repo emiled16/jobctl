@@ -66,7 +66,7 @@ class VectorStoreConfig:
 class JobctlConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     vector_store: VectorStoreConfig = field(default_factory=VectorStoreConfig)
-    default_template: str = "emile-resume.html"
+    default_template: str = "modern-compact-resume.html"
 
     # Backward-compatibility shims for the v1 flat keys. New code should
     # read from the nested ``llm`` block directly.
@@ -184,7 +184,7 @@ def _migrate_flat_config(raw: dict[str, Any]) -> dict[str, Any]:
     else:
         llm_section.setdefault("provider", "codex")
     migrated["llm"] = llm_section
-    migrated.setdefault("default_template", raw.get("default_template", "emile-resume.html"))
+    migrated.setdefault("default_template", raw.get("default_template", "modern-compact-resume.html"))
     return migrated
 
 
@@ -260,7 +260,7 @@ def _validate_config(raw: dict[str, Any]) -> JobctlConfig:
         distance=vector_distance,
     )
 
-    default_template = str(raw.get("default_template") or "emile-resume.html")
+    default_template = str(raw.get("default_template") or "modern-compact-resume.html")
 
     return JobctlConfig(
         llm=llm_cfg,

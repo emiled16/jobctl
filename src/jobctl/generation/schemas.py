@@ -1,6 +1,6 @@
 """Pydantic schemas for generated application materials."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,6 +33,7 @@ class EducationEntry(BaseModel):
     institution: str
     degree: str
     field: str | None = None
+    start_date: str | None = None
     end_date: str | None = None
     details: list[str] | None = None
 
@@ -85,6 +86,7 @@ class ResumeYAML(BaseModel):
     certifications: list[str] | None = None
     projects: list[ProjectEntry] | None = None
     publications: list[PublicationEntry] | None = None
+    other: dict[str, Any] | list[str] | None = None
 
 
 class CoverLetterYAML(BaseModel):
